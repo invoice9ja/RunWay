@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Runway"
+description = "A testnet prototype for revenue-routed working capital on Arc. Connect a Runway deployment to inspect splitter revenue, vault advances, repayment progress, and testnet transaction history."
+version = "1.0.0"
+id = "artifacts/runway"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20158
+
+[services.development]
+run = "pnpm --filter @workspace/runway run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/runway", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/runway/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20158"
+BASE_PATH = "/"
