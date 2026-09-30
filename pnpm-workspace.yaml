@@ -64,19 +64,13 @@ catalog:
   react-dom: 19.1.0
   tailwind-merge: ^3.3.1
   tailwindcss: ^4.1.14
-  tsx: ^4.21.0
+  tsx: ^4.23.13
   typescript: ^5.9.3
   vite: ^7.3.2
   wouter: ^3.3.5
   zod: ^3.25.76
 
 autoInstallPeers: false
-
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - msw
-  - unrs-resolver
 
 overrides:
   # replit uses linux-x64 only, we can exclude all other platforms
@@ -166,6 +160,6 @@ overrides:
   js-yaml: '4.3.2'
 
 allowBuilds:
-  esbuild: set this to true or false
-  keccak: set this to true or false
-  secp256k1: set this to true or false
+  esbuild: true
+  keccak: true
+  secp256k1: true

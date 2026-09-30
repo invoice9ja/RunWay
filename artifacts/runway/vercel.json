@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "regions": ["iad1"],
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/status.ts": { "maxDuration": 60 },
+    "api/keeper.ts": { "maxDuration": 60 },
+    "api/demo/buy.ts": { "maxDuration": 60 },
+    "api/x402/resource.ts": { "maxDuration": 60 }
+  },
+  "crons": [
+    {
+      "path": "/api/keeper?auto=1",
+      "schedule": "0 12 * * *"
+    }
+  ],
+  "env": {
+    "RUNWAY_NETWORK": "base-sepolia",
+    "RUNWAY_CHAIN_ID": "84532",
+    "RUNWAY_RPC_URL": "https://sepolia.base.org",
+    "RUNWAY_EXPLORER_URL": "https://sepolia.basescan.org",
+    "RUNWAY_USDC_ADDRESS": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "RUNWAY_VAULT_ADDRESS": "0x50521815D832eb80BabBA0f888c686Fb224f2Dd4",
+    "RUNWAY_FACTORY_ADDRESS": "0xC278850c7194a8ecD8b81A223847F995Ad56fCdf",
+    "RUNWAY_SPLITTER_ADDRESS": "0x96030e714e14b848445b40dfc327d828a3f474f6",
+    "RUNWAY_SETTLE_THRESHOLD": "100000",
+    "RUNWAY_DEMO_PRICE": "100000"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "network": "base-sepolia",
+  "chainId": 84532,
+  "vault": "0x50521815D832eb80BabBA0f888c686Fb224f2Dd4",
+  "splitterImpl": "0xb220f46e18166F5e4DAe0B8EB826ab27c8305110",
+  "factory": "0xC278850c7194a8ecD8b81A223847F995Ad56fCdf",
+  "splitter": "0x96030e714e14b848445b40dfc327d828a3f474f6",
+  "usdc": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  "admin": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+  "underwriter": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+  "watcher": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+  "timestamp": "2026-09-30T16:00:00.000Z",
+  "explorer": "https://sepolia.basescan.org"
+}

@@ -10,10 +10,13 @@
   },
   "private": true,
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.3"
+    "@replit/connectors-sdk": "^0.4.3",
+    "viem": "^2.57.0"
   },
   "devDependencies": {
+    "playwright": "1.63.0",
     "prettier": "^3.9.6",
+    "tsx": "catalog:",
     "typescript": "~5.9.3"
   }
 }
