@@ -75,6 +75,7 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
         // This ensures the role is set even if base constructor has issues
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
+        require(_usdc != address(0), "USDC cannot be zero address");
         usdc = IERC20(_usdc);
         GLOBAL_MAX = _globalMax;
         STARTER_CAP = _starterCap;
@@ -128,10 +129,11 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
 
         splitterToLoanId[splitter] = loanId + 1;
 
+        // Emit event BEFORE external call (CEI pattern)
+        emit LoanOpened(loanId, splitter, principal, FEE_BPS_DEFAULT, SHARE_BPS_DEFAULT, block.timestamp + (DUE_DAYS_DEFAULT * 86400), rationaleHash);
+
         // Notify splitter that loan is active
         splitterContract.setLoanActive(true, principal);
-
-        emit LoanOpened(loanId, splitter, principal, FEE_BPS_DEFAULT, SHARE_BPS_DEFAULT, block.timestamp + (DUE_DAYS_DEFAULT * 86400), rationaleHash);
 
         return loanId;
     }
@@ -287,5 +289,12 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
 
     function getLoansLength() external view returns (uint256) {
         return loans.length;
+    }
+
+    /**
+     * @notice Receive USDC directly (for direct transfers)
+     */
+    receive() external payable {
+        require(msg.value == 0, "Use USDC transfer, not ETH");
     }
 }

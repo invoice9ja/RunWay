@@ -18,7 +18,7 @@ contract RevenueSplitter is AccessControl, ReentrancyGuard {
     bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
     bytes32 public constant AGENT_ROLE = keccak256("AGENT_ROLE");
 
-    address public immutable vault;
+    address payable public immutable vault;
     address public immutable agent;
     address public payout; // Where agent withdraws to
     address public immutable usdc; // USDC token address
@@ -40,10 +40,10 @@ contract RevenueSplitter is AccessControl, ReentrancyGuard {
         address _usdc,
         uint256 _shareBps
     ) AccessControl() ReentrancyGuard() {
-        _grantRole(DEFAULT_ADMIN_ROLE, _vault);
-        _grantRole(VAULT_ROLE, _vault);
+        _grantRole(DEFAULT_ADMIN_ROLE, payable(_vault));
+        _grantRole(VAULT_ROLE, payable(_vault));
         _grantRole(AGENT_ROLE, _agent);
-        vault = _vault;
+        vault = payable(_vault);
         agent = _agent;
         payout = _payout;
         usdc = _usdc;
@@ -56,14 +56,6 @@ contract RevenueSplitter is AccessControl, ReentrancyGuard {
     receive() external payable {
         // Only accept USDC (non-zero amount)
         require(msg.value == 0, "Use USDC transfer, not ETH");
-    }
-
-    /**
-     * @notice Permit USDC transfers via EIP-3009 (x402 "exact" flow)
-     * @dev Called by USDC token contract during transferWithAuthorization
-     */
-    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
-        return 0x150b7a02; // ERC721Receiver magic value (not used but required for some interfaces)
     }
 
     /**
@@ -149,14 +141,14 @@ contract RevenueSplitter is AccessControl, ReentrancyGuard {
      * @notice Get current USDC balance
      */
     function getBalance() external view returns (uint256) {
-        return IERC20(payout).balanceOf(address(this));
+        return IERC20(usdc).balanceOf(address(this));
     }
 
     /**
      * @notice Get unsettled revenue (since last settle)
      */
     function getUnsettledRevenue() external view returns (uint256) {
-        uint256 currentBalance = IERC20(payout).balanceOf(address(this));
+        uint256 currentBalance = IERC20(usdc).balanceOf(address(this));
         return currentBalance > lastSettledBalance ? currentBalance - lastSettledBalance : 0;
     }
 }

@@ -1,11 +1,37 @@
 #!/usr/bin/env node
 
 import { config } from "dotenv";
-config({ path: ".env" });
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+config({ path: join(__dirname, "../.env") });
 
 import { ethers } from "ethers";
-import { RunwayVault__factory, RunwayFactory__factory, RevenueSplitter__factory } from "../contracts/typechain";
 import * as fs from "fs";
+
+// Load ABIs from Foundry artifacts
+const projectRoot = "/home/moses/Desktop/RunWay";
+const artifactsDir = join(projectRoot, "contracts/out");
+
+console.log("Loading ABIs from:", artifactsDir);
+
+const RevenueSplitter_artifact = JSON.parse(fs.readFileSync(join(artifactsDir, "RevenueSplitter.sol/RevenueSplitter.json"), "utf8"));
+const RunwayVault_artifact = JSON.parse(fs.readFileSync(join(artifactsDir, "RunwayVault.sol/RunwayVault.json"), "utf8"));
+const RunwayFactory_artifact = JSON.parse(fs.readFileSync(join(artifactsDir, "RunwayFactory.sol/RunwayFactory.json"), "utf8"));
+
+console.log("RevenueSplitter ABI:", RevenueSplitter_artifact.abi ? RevenueSplitter_artifact.abi.length + " items" : "UNDEFINED");
+console.log("RunwayVault ABI:", RunwayVault_artifact.abi ? RunwayVault_artifact.abi.length + " items" : "UNDEFINED");
+console.log("RunwayFactory ABI:", RunwayFactory_artifact.abi ? RunwayFactory_artifact.abi.length + " items" : "UNDEFINED");
+
+const RevenueSplitter_abi = RevenueSplitter_artifact.abi;
+const RunwayVault_abi = RunwayVault_artifact.abi;
+const RunwayFactory_abi = RunwayFactory_artifact.abi;
+
+const RevenueSplitter_bytecode = RevenueSplitter_artifact.bytecode;
+const RunwayVault_bytecode = RunwayVault_artifact.bytecode;
+const RunwayFactory_bytecode = RunwayFactory_artifact.bytecode;
 
 async function main() {
   const args = process.argv.slice(2);
@@ -18,7 +44,8 @@ async function main() {
     throw new Error(`RPC URL not configured for ${network}`);
   }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  // Use StaticJsonRpcProvider to avoid network detection
+const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: { chainId: 5042, name: "arc-mainnet" } });
   const deployer = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
   
   console.log(`Deploying to ${network} (${rpcUrl})`);
@@ -26,8 +53,8 @@ async function main() {
 
   const usdcAddress = process.env.USDC_ADDRESS!;
   const adminAddress = process.env.ADMIN_ADDRESS || deployer.address;
-  const underwriterAddress = process.env.UNDERWRITER_ADDRESS!;
-  const watcherAddress = process.env.WATCHER_ADDRESS!;
+  const underwriterAddress = process.env.UNDERWRITER_ADDRESS || deployer.address;
+  const watcherAddress = process.env.WATCHER_ADDRESS || deployer.address;
 
   const GLOBAL_MAX = BigInt(process.env.GLOBAL_MAX || "10000000000");
   const STARTER_CAP = BigInt(process.env.STARTER_CAP || "500000000");
@@ -37,7 +64,7 @@ async function main() {
 
   // 1. Deploy RunwayVault
   console.log("\n1. Deploying RunwayVault...");
-  const vaultFactory = new RunwayVault__factory(deployer);
+  const vaultFactory = new ethers.ContractFactory(RunwayVault_abi, RunwayVault_bytecode, deployer);
   const vault = await vaultFactory.deploy(
     usdcAddress,
     GLOBAL_MAX,
@@ -52,7 +79,7 @@ async function main() {
 
   // 2. Deploy RevenueSplitter implementation (for reference)
   console.log("\n2. Deploying RevenueSplitter implementation...");
-  const splitterFactory = new RevenueSplitter__factory(deployer);
+  const splitterFactory = new ethers.ContractFactory(RevenueSplitter_abi, RevenueSplitter_bytecode, deployer);
   const splitterImpl = await splitterFactory.deploy(
     vaultAddress,
     ethers.ZeroAddress,
@@ -66,7 +93,7 @@ async function main() {
 
   // 3. Deploy RunwayFactory
   console.log("\n3. Deploying RunwayFactory...");
-  const factoryFactory = new RunwayFactory__factory(deployer);
+  const factoryFactory = new ethers.ContractFactory(RunwayFactory_abi, RunwayFactory_bytecode, deployer);
   const factory = await factoryFactory.deploy(
     vaultAddress,
     splitterImplAddress,
@@ -80,23 +107,26 @@ async function main() {
   // 4. Grant roles
   console.log("\n4. Granting roles...");
   
-  const underwriterRole = await vault.UNDERWRITER_ROLE();
-  let tx = await vault.grantRole(underwriterRole, underwriterAddress);
+  const vaultContract = new ethers.Contract(vaultAddress, RunwayVault_abi, deployer);
+  const factoryContract = new ethers.Contract(factoryAddress, RunwayFactory_abi, deployer);
+
+  const underwriterRole = await vaultContract.UNDERWRITER_ROLE();
+  let tx = await vaultContract.grantRole(underwriterRole, underwriterAddress);
   await tx.wait();
   console.log(`   UNDERWRITER_ROLE granted to ${underwriterAddress}`);
 
-  const watcherRole = await vault.WATCHER_ROLE();
-  tx = await vault.grantRole(watcherRole, watcherAddress);
+  const watcherRole = await vaultContract.WATCHER_ROLE();
+  tx = await vaultContract.grantRole(watcherRole, watcherAddress);
   await tx.wait();
   console.log(`   WATCHER_ROLE granted to ${watcherAddress}`);
 
-  const defaultAdminRole = await vault.DEFAULT_ADMIN_ROLE();
-  tx = await vault.grantRole(defaultAdminRole, factoryAddress);
+  const defaultAdminRole = await vaultContract.DEFAULT_ADMIN_ROLE();
+  tx = await vaultContract.grantRole(defaultAdminRole, factoryAddress);
   await tx.wait();
   console.log(`   DEFAULT_ADMIN_ROLE on vault granted to factory`);
 
-  const factoryDefaultAdminRole = await factory.DEFAULT_ADMIN_ROLE();
-  tx = await factory.grantRole(factoryDefaultAdminRole, adminAddress);
+  const factoryDefaultAdminRole = await factoryContract.DEFAULT_ADMIN_ROLE();
+  tx = await factoryContract.grantRole(factoryDefaultAdminRole, adminAddress);
   await tx.wait();
   console.log(`   DEFAULT_ADMIN_ROLE on factory granted to admin`);
 

@@ -11,7 +11,7 @@ import {RunwayVault} from "./RunwayVault.sol";
  * @notice Deploys RevenueSplitter clones and registers them in the vault
  */
 contract RunwayFactory is AccessControl {
-    address public immutable vault;
+    address payable public immutable vault;
     address public immutable splitterImplementation;
     address public immutable usdc;
     uint256 public immutable defaultShareBps;
@@ -40,7 +40,7 @@ contract RunwayFactory is AccessControl {
         uint256 _defaultShareBps
     ) AccessControl() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        vault = _vault;
+        vault = payable(_vault);
         splitterImplementation = _splitterImplementation;
         usdc = _usdc;
         defaultShareBps = _defaultShareBps;
