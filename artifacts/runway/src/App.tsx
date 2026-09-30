@@ -4,6 +4,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import Status from '@/pages/status';
 import {
   Activity,
   AlertTriangle,
@@ -294,6 +295,7 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/status" component={Status} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

@@ -4,11 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "hello": "tsx ./src/hello.ts",
+    "deploy:testnet": "tsx ./deploy.ts --network testnet",
+    "deploy:mainnet": "tsx ./deploy.ts --network mainnet",
+    "keeper": "tsx ./services/keeper/src/index.ts",
+    "demo-seller": "tsx ./services/demo-seller/src/index.ts",
+    "demo-buyer": "tsx ./services/demo-buyer/src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/express": "^4.17.21",
+    "typescript": "catalog:",
     "tsx": "catalog:"
   }
 }
