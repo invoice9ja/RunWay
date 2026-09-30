@@ -1,0 +1,24 @@
+{
+  "name": "@workspace/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:ci": "forge test --profile ci",
+    "test:invariant": "forge test --profile ci --match-contract Invariant",
+    "coverage": "forge coverage",
+    "coverage:lcov": "forge coverage --report lcov",
+    "clean": "forge clean",
+    "fmt": "forge fmt",
+    "fmt:check": "forge fmt --check",
+    "snapshot": "forge snapshot",
+    "deploy:testnet": "forge script script/Deploy.s.sol --rpc-url arc_testnet --broadcast --verify",
+    "deploy:mainnet": "forge script script/Deploy.s.sol --rpc-url arc_mainnet --broadcast --verify",
+    "anvil": "anvil --fork-url $ARC_MAINNET_RPC"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

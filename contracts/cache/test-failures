@@ -1,0 +1,1 @@
+{"version":1,"failures":[{"contract":"test/RunwayTest.t.sol:RunwayTest","test":"test_SetPayoutBlockedDuringLoan"}]}
