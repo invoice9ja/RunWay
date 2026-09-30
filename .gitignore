@@ -17,6 +17,7 @@ out-tsc
 contracts/out/
 contracts/cache/
 contracts/broadcast/
+contracts/typechain/
 
 # dependencies
 node_modules
