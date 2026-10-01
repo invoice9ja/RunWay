@@ -13,8 +13,18 @@ import type { RunwayPublicClient } from './chain.js';
  */
 const CHUNK = 10_000n;
 
+/**
+ * USDC needs a much smaller chunk than the protocol contracts.
+ *
+ * Arc testnet USDC is high-traffic: a 3,000-block window carries around 15,000
+ * transfer logs. Wide queries against it are rejected, so the same 10,000-block
+ * chunk that serves the vault in two requests fails for the token and silently
+ * drops every receipt.
+ */
+const CHUNK_HIGH_TRAFFIC = 3_000n;
+
 /** Ceiling so one status read cannot fan out into an unbounded call storm. */
-const MAX_CHUNKS = 4;
+const MAX_CHUNKS = 8;
 
 /**
  * Errors are retried; empty results are not.
@@ -88,11 +98,14 @@ export async function fetchLogsForAddress(
     abi: Abi;
     fromBlock: bigint;
     toBlock: bigint;
+    /** Override for high-traffic addresses such as USDC. */
+    chunk?: bigint;
   },
   explorerTx: (hash: string) => string,
   stats: FetchStats,
 ): Promise<LogRow[]> {
   const rows: LogRow[] = [];
+  const chunkSize = options.chunk ?? CHUNK;
   const bucket = (stats.perAddress[options.address] ??= { chunks: 0, calls: 0, failedChunks: 0 });
 
   const events = (options.abi as readonly { type: string }[])
@@ -104,9 +117,9 @@ export async function fetchLogsForAddress(
   for (
     let start = options.fromBlock, chunk = 0;
     start <= options.toBlock && chunk < MAX_CHUNKS;
-    start += CHUNK, chunk += 1
+    start += chunkSize, chunk += 1
   ) {
-    const end = start + CHUNK - 1n > options.toBlock ? options.toBlock : start + CHUNK - 1n;
+    const end = start + chunkSize - 1n > options.toBlock ? options.toBlock : start + chunkSize - 1n;
     stats.chunks += 1;
     bucket.chunks += 1;
 

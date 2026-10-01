@@ -157,7 +157,7 @@ const handler: Handler = async (_req, res) => {
     );
     const usdcLogs = await fetchLogsForAddress(
       client,
-      { address: config.usdc, abi: erc20Abi, fromBlock, toBlock: head },
+      { address: config.usdc, abi: erc20Abi, fromBlock, toBlock: head, chunk: 3_000n },
       explorerTx,
       stats,
     );
