@@ -98,6 +98,14 @@
   --destructive-foreground: 0 0% 98%;
   --input: 150 15% 82%;
   --ring: 164 30% 35%;
+  /* Card surface and the ink that is legible on it.
+     Derived once here so contrast is a single decision rather than a hex per
+     rule. --ink-muted is the lightest grey that still clears 4.5:1 on --card. */
+  --card-surface: #f7f9f5;
+  --ink: #1f3f35;
+  --ink-muted: #5b7166;
+  --ink-subtle: #5c7067;
+  --rule: #dfe7e0;
   --chart-1: 164 40% 32%;
   --chart-2: 73 68% 46%;
   --chart-3: 5 58% 50%;
@@ -582,7 +590,7 @@ button { cursor: pointer; }
 .chain-card { border: 1px solid rgba(229,239,229,.13); background: rgba(255,255,255,.035); border-radius: 10px; padding: 13px; }
 .chain-card-title { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .chain-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #d59a65; box-shadow: 0 0 0 3px rgba(213,154,101,.12); }
-.chain-caption { font: 10px/1.6 var(--app-font-mono); color: #9bb0a5; margin: 8px 0 0; }
+.chain-caption /* on --sidebar, 6.2:1 */ { font: 10px/1.6 var(--app-font-mono); color: #9bb0a5; margin: 8px 0 0; }
 .prototype-note { margin: 14px 4px 0; color: #92a79e; font-size: 10px; line-height: 1.6; }
 
 /* collapsed rail */
@@ -590,7 +598,7 @@ button { cursor: pointer; }
 .sidebar.collapsed .brand-text,
 .sidebar.collapsed .nav-label-text,
 .sidebar.collapsed .nav-count,
-.sidebar.collapsed .chain-caption,
+.sidebar.collapsed .chain-caption /* on --sidebar, 6.2:1 */,
 .sidebar.collapsed .prototype-note { display: none; }
 .sidebar.collapsed .nav-link { justify-content: center; padding: 11px 0; }
 .sidebar.collapsed .chain-card { padding: 11px 0; display: flex; justify-content: center; }
@@ -599,7 +607,7 @@ button { cursor: pointer; }
 .sidebar.collapsed .nav-label { height: 12px; margin: 8px 0 0; padding: 0; overflow: hidden; }
 
 /* ---- icon button ------------------------------------------------------- */
-.icon-button { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border: 1px solid rgba(229,239,229,.14); border-radius: 8px; background: rgba(255,255,255,.04); color: #bdd0c7; transition: background .18s, color .18s; }
+.icon-button { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 40px; border: 1px solid rgba(229,239,229,.14); border-radius: 8px; background: rgba(255,255,255,.04); color: #bdd0c7; transition: background .18s, color .18s; }
 /* Touch pointers get a 40px hit area without changing the visual size much. */
 @media (pointer: coarse) {
   .icon-button { width: 40px; height: 40px; flex-basis: 40px; }
@@ -641,13 +649,43 @@ h1 { font:600 clamp(30px,3.2vw,43px)/1.1 var(--app-font-serif); letter-spacing:-
 .metric-icon { color:#71877a; }
 .metric-value { color:#254238; font:600 25px/1.1 var(--app-font-serif); letter-spacing:-.045em; margin-top:17px; }
 .metric-helper { color:#829087; font-size:10px; margin-top:5px; }
-.section-card { background:hsl(var(--card)); border:1px solid hsl(var(--border)); border-radius:11px; margin-bottom:16px; overflow:hidden; scroll-margin-top:14px; }
-.section-heading { display:flex; justify-content:space-between; align-items:center; padding:17px 20px; border-bottom:1px solid hsl(var(--border)); }
+.section-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  scroll-margin-top: 14px;
+  box-shadow: 0 1px 2px hsl(164 30% 15% / .04);
+}
+
+/* Lift on hover only for cards that are actually interactive, and only when
+   motion is welcome. Static cards must not move under the pointer. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .section-card-interactive:hover {
+    border-color: #c3d2c5;
+    box-shadow: 0 2px 10px hsl(164 30% 15% / .07);
+  }
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: linear-gradient(hsl(var(--card)), hsl(var(--card) / .72));
+}
+
+/* The heading bar grows downward, so pin the content to the top rather than
+   centring it. Centring made a one-line and a two-line heading sit on different
+   baselines between cards. */
+.section-heading-end { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
 .section-title-wrap { display:flex; align-items:center; gap:11px; }
 .section-icon { width:30px; height:30px; border-radius:8px; display:grid; place-items:center; background:#e8eee7; color:#436454; }
-.section-title { font:600 14px var(--app-font-serif); color:#26463b; letter-spacing:-.02em; }
-.section-subtitle { font-size:10px; color:#87938c; margin-top:3px; }
-.section-kicker { font:9px var(--app-font-mono); color:#829087; letter-spacing:.1em; text-transform:uppercase; }
+.section-title { font: 600 14px/1.35 var(--app-font-serif); color: #22443a; letter-spacing: -.01em; margin: 0; }
+.section-subtitle { font-size:11px; color:var(--ink-muted); margin-top:4px; line-height:1.55; }
+.section-kicker { font:10px var(--app-font-mono); color:var(--ink-muted); letter-spacing:.08em; text-transform:uppercase; white-space:nowrap; }
 .config-body { padding:20px; }
 .config-intro { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:18px; }
 .config-description { max-width:620px; color:#738179; font-size:11px; line-height:1.65; margin:0; }
@@ -663,7 +701,7 @@ h1 { font:600 clamp(30px,3.2vw,43px)/1.1 var(--app-font-serif); letter-spacing:-
 .config-actions { display:flex; align-items:center; gap:12px; margin-top:17px; flex-wrap:wrap; }
 .primary-button { border:0; border-radius:7px; background:#24493c; color:#f6f8f1; padding:10px 14px; display:inline-flex; align-items:center; gap:8px; font-size:11px; font-weight:600; transition:background .18s,transform .18s; }
 .primary-button:hover { background:#315b4a; transform:translateY(-1px); }
-.secondary-button { border:1px solid #d5dfd4; border-radius:7px; background:transparent; color:#5d7065; padding:9px 12px; display:inline-flex; align-items:center; gap:7px; font-size:11px; transition:background .18s,border-color .18s; }
+.secondary-button { border:1px solid #d5dfd4; border-radius:7px; background:transparent; color:#42574c; padding:9px 12px; display:inline-flex; align-items:center; gap:7px; font-size:11px; transition:background .18s,border-color .18s; }
 .secondary-button:hover { background:#edf2eb; border-color:#b9cabe; }
 .save-feedback { color:#597863; font-size:10px; }
 .saved-addresses { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:17px; }
@@ -673,8 +711,8 @@ h1 { font:600 clamp(30px,3.2vw,43px)/1.1 var(--app-font-serif); letter-spacing:-
 .deployment-row { display:flex; gap:11px; align-items:center; margin-top:17px; padding:11px 12px; border-radius:7px; background:#f3f5f0; color:#77857d; font-size:10px; line-height:1.5; }
 .deployment-row svg { color:#7b8b80; flex-shrink:0; }
 .table-empty { min-height: 118px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 22px; }
-.empty-title { color: #52665a; font-size: 12px; font-weight: 600; }
-.empty-copy { color: #929d95; font-size: 11px; margin: 6px 0 0; max-width: 46ch; }
+.empty-title { color: #3f5349; font-size: 13px; font-weight: 600; }
+.empty-copy { color: var(--ink-muted); font-size: 12px; line-height: 1.6; margin: 6px 0 0; max-width: 52ch; }
 .bottom-grid { display:grid; grid-template-columns:1.2fr .8fr; gap:16px; }
 .flow-body,.risk-body { padding:19px 20px; }
 .flow-track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 12px; list-style: none; margin: 0; padding: 0; counter-reset: step; }
@@ -685,7 +723,7 @@ h1 { font:600 clamp(30px,3.2vw,43px)/1.1 var(--app-font-serif); letter-spacing:-
 .flow-caption { font-size:10px; color:#8a968e; margin:14px 0 0; line-height:1.6; }
 .risk-level { display:flex; align-items:center; gap:9px; color:#8f6445; font-size:11px; font-weight:600; }
 .risk-badge { border-radius:4px; background:#f5eadc; color:#986b48; padding:4px 6px; font:9px var(--app-font-mono); text-transform:uppercase; letter-spacing:.07em; }
-.risk-body p { font-size:10px; color:#829087; line-height:1.65; margin:12px 0 0; }
+.risk-body p { font-size:12px; color:var(--ink-muted); line-height:1.65; margin:12px 0 0; }
 .footer-line { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 2px 0; color:#8b9890; font:9px var(--app-font-mono); }
 .footer-line strong { color:#66786d; font-weight:500; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px 28px; flex-wrap: wrap; margin-bottom: 22px; }
@@ -696,7 +734,7 @@ h1 { font:600 clamp(30px,3.2vw,43px)/1.1 var(--app-font-serif); letter-spacing:-
 h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacing: -.065em; margin: 10px 0 8px; color: #1c3831; }
 .page-subtitle { margin: 0; color: #718078; font-size: 13px; }
 .last-read { color: #76867e; font: 10px var(--app-font-mono); white-space: nowrap; }
-.page-note { color: #75837b; font-size: 11px; line-height: 1.7; margin: 0 0 16px; }
+.page-note { color: var(--ink-muted); font-size: 12px; line-height: 1.7; margin: 0 0 16px; }
 .page-note code, .explainer code, .x402-note code { font-family: var(--app-font-mono); font-size: 10px; background: #eef2ec; padding: 1px 4px; border-radius: 3px; }
 .page-note strong { color: #274b3d; }
 
@@ -729,20 +767,24 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
 /* ---- params / contracts / findings ------------------------------------- */
 .param-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; background: hsl(var(--border)); }
 .param { background: hsl(var(--card)); padding: 15px 18px; }
-.param-label { color: #829087; font: 9px var(--app-font-mono); letter-spacing: .1em; text-transform: uppercase; }
-.param-value { color: #254238; font: 600 16px/1.2 var(--app-font-serif); letter-spacing: -.03em; margin-top: 8px; }
+.param-label { color: var(--ink-muted); font: 10px var(--app-font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.param-value { color: #1f3f35; font: 600 17px/1.25 var(--app-font-serif); letter-spacing: -.02em; margin-top: 7px; }
+
+/* Machine-generated values: an address or a hash in a 17px serif face is hard to
+   read and does not line up with its neighbours in a grid. */
+.param-value-mono { font: 500 12px/1.45 var(--app-font-mono); letter-spacing: 0; word-break: break-all; }
 .contract-list { display: grid; }
 .contract-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 20px; border-bottom: 1px solid hsl(var(--border)); }
 .contract-row:last-child { border-bottom: 0; }
 .contract-name { color: #274b3d; font-size: 12px; font-weight: 600; }
 .contract-address { display: inline-flex; align-items: center; min-height: 32px; margin-top: 3px; color: #2f6b4f; font-size: 10px; word-break: break-all; }
-.contract-role { color: #829087; font-size: 10px; margin-top: 5px; }
+.contract-role { color: #42574c; font-size: 11px; margin-top: 5px; }
 .finding-list { display: grid; }
 .finding { padding: 17px 20px; border-bottom: 1px solid hsl(var(--border)); }
 .finding:last-child { border-bottom: 0; }
 .finding-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.finding-title { margin: 0; color: #1c3831; font: 600 14px/1.3 var(--app-font-serif); letter-spacing: -.02em; }
-.finding-body { margin: 8px 0 0; color: #6f7f77; font-size: 11px; line-height: 1.7; }
+.finding-title { margin: 0; color: #22443a; font: 600 14px/1.3 var(--app-font-serif); letter-spacing: -.02em; }
+.finding-body { margin: 8px 0 0; color: #42574c; font-size: 12px; line-height: 1.7; }
 .sev { display: inline-block; padding: 3px 8px; border-radius: 4px; font: 9px var(--app-font-mono); letter-spacing: .09em; text-transform: uppercase; }
 .sev-critical { background: #f8e4e1; color: #9c3a30; }
 .sev-high { background: #f7eddc; color: #7d5c1c; }
@@ -938,4 +980,146 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
 @media (pointer: coarse) {
   .contract-address { min-height: 40px; }
   .saved-address-value { min-height: 22px; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Focus. No interactive element in this app had a visible focus ring, which
+   makes the whole thing unusable by keyboard. :focus-visible only, so a mouse
+   click does not leave a ring behind.
+   --------------------------------------------------------------------------- */
+:where(a, button, input, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid #2f6b4a;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Hit targets. 40px is the minimum for touch, and the sidebar collapse toggle was
+   the only control below it at 32px. */
+.primary-button, .secondary-button { min-height: 40px; justify-content: center; }
+
+:where(.content, .page-heading) :where(a, button) {
+  min-height: 40px;
+}
+
+/* An inline link inside a sentence must not be stretched; only standalone
+   controls get the floor. */
+.page-note a, .risk-body a:not(.primary-button):not(.secondary-button),
+.explainer a, .finding-body a { min-height: 0; }
+
+:where(a, button):disabled { cursor: not-allowed; opacity: .55; }
+:where(a, button):disabled:hover { transform: none; background: inherit; }
+
+/* ---------------------------------------------------------------------------
+   Density. Tables were carrying 10px text; 12px is the floor for body copy and
+   still fits the row heights the pages already assume.
+   --------------------------------------------------------------------------- */
+.data-table { font-size: 12px; }
+.data-table th { font-size: 10px; letter-spacing: .06em; }
+.data-table td { padding-top: 11px; padding-bottom: 11px; }
+
+/* Numeric columns align on the decimal, which only happens with tabular
+   figures. Mono alone does not give that. */
+.data-table .num, .param-value-mono, .tx-hash {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A long hash must not stretch a table; wrap inside its own column. */
+.tx-hash { font: 500 11px var(--app-font-mono); color: #3d5a4e; word-break: break-all; }
+
+
+/* ---------------------------------------------------------------------------
+   Card body rhythm.
+
+   Four different paddings were in use across the pages (19px, 20px, 15px, and
+   some bodies had none), so cards in the same column did not line up with each
+   other. One variable, applied to every card body.
+   --------------------------------------------------------------------------- */
+.section-body { padding: var(--card-body-pad, 20px); }
+
+.risk-body,
+.x402-body,
+.config-body,
+.flow-body,
+.contract-list,
+.explainer {
+  --card-body-pad: 20px;
+}
+
+/* Sections whose body is a table or a list flush to the edges read better with no
+   padding of their own, since the rows carry it. */
+.section-body-flush { padding: 0; }
+
+/* ---------------------------------------------------------------------------
+   Card hierarchy. The kicker is the only status word a card carries, and it was
+   competing with the title because both sat on the same baseline at similar
+   weights. The kicker is now pinned, monospaced, and quiet.
+   --------------------------------------------------------------------------- */
+.section-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: hsl(150 18% 92% / .7);
+}
+
+.section-kicker-pass, .section-kicker-settled { background: #e4f0e9; color: #2f6b4a; }
+.section-kicker-fail  { background: #f8e4e1; color: #9c3a30; }
+.section-kicker-gated { background: #f7eddc; color: #7d5c1c; }
+
+/* ---------------------------------------------------------------------------
+   Narrow screens. The kicker was hidden below 620px, which threw away the only
+   status signal a card had. It moves under the title instead of disappearing.
+   --------------------------------------------------------------------------- */
+@media (max-width: 620px) {
+  .section-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 14px 15px;
+  }
+  .section-heading-end { width: 100%; justify-content: space-between; }
+  .section-kicker { display: inline-flex; }
+  .risk-body, .x402-body, .config-body, .flow-body { --card-body-pad: 15px; }
+  .section-title { font-size: 13px; }
+  .section-subtitle { font-size: 11px; }
+  .param-value { font-size: 16px; }
+  .param-value-mono { font-size: 11px; }
+  .data-table { font-size: 11px; }
+  .explainer { padding: 15px 15px 15px 32px; }
+}
+
+/* Two columns collapse to one rather than squeezing below a readable width. */
+@media (max-width: 420px) {
+  .param-grid, .metric-grid, .metric-grid-3 { grid-template-columns: 1fr; }
+  .section-heading-end { flex-wrap: wrap; }
+}
+
+/* Touch: buttons must clear 44px, and nothing may depend on hover to be usable. */
+@media (pointer: coarse) {
+  .primary-button, .secondary-button { min-height: 44px; padding-inline: 16px; }
+  .x402-step { min-height: 44px; }
+  .contract-row, .table-row { min-height: 52px; }
+}
+
+/* ---------------------------------------------------------------------------
+   Focus. Added above; this is the dark-theme counterpart so a focus ring on the
+   sidebar is not invisible against a dark surface.
+   --------------------------------------------------------------------------- */
+.sidebar :where(a, button):focus-visible,
+.page-heading :where(a, button):focus-visible {
+  outline-color: hsl(var(--sidebar-primary));
+}
+
+/* ---------------------------------------------------------------------------
+   Print. A reviewer may print a page or save it as a PDF. Links lose their
+   underlines but keep their destination, and the address bar stops overflowing.
+   --------------------------------------------------------------------------- */
+@media print {
+  .sidebar, .mobile-bar, .drawer-overlay, .page-footer, .x402-actions { display: none !important; }
+  .app-shell { display: block !important; }
+  .content { max-width: none; padding: 0; }
+  .section-card { break-inside: avoid; box-shadow: none; }
+  a[href^="http"]::after { content: " (" attr(href) ")"; font: 9px var(--app-font-mono); color: #555; }
 }

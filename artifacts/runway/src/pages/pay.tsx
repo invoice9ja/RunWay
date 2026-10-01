@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { PageFooter, PageHeader } from '@/components/app-shell';
 import { shortAddress } from '@/lib/chain-status';
+import { Section } from '@/components/section';
 import {
   ARC_TESTNET,
   approveUsdc,
@@ -277,17 +278,12 @@ export function PayPage() {
         subtitle="Connect a wallet, sign one authorization, and the revenue routes to the agent automatically."
       />
 
-      <section className="section-card">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Flow</div>
-            <div className="section-subtitle">
-              EIP-3009 exact scheme on {ARC_TESTNET.name}, chain {ARC_TESTNET.id}
-            </div>
-          </div>
-          <span className="section-kicker">{price ? `${formatUsd(price)} USDC` : 'LOADING'}</span>
-        </div>
-
+      <Section
+        title="Flow"
+        subtitle={`EIP-3009 exact scheme on ${ARC_TESTNET.name}, chain ${ARC_TESTNET.id}`}
+        kicker={price ? `${formatUsd(price)} USDC` : 'LOADING'}
+        testId="pay-flow"
+      >
         <ol className="x402-steps" data-testid="pay-stages">
           {stages.map((stage) => (
             <li className={`x402-step progress-${stage.state}`} key={stage.id}>
@@ -313,22 +309,14 @@ export function PayPage() {
             {error}
           </p>
         )}
-      </section>
+      </Section>
 
-      <section className="section-card">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Wallet</div>
-            <div className="section-subtitle">
-              {wallet ? wallet.address : 'No wallet connected'}
-            </div>
-          </div>
-          {wallet && (
-            <span className="section-kicker">
-              {onWrongChain ? `WRONG CHAIN · ${wallet.chainId}` : 'ARC TESTNET'}
-            </span>
-          )}
-        </div>
+      <Section
+        title="Wallet"
+        subtitle={wallet ? wallet.address : 'No wallet connected'}
+        kicker={wallet ? (onWrongChain ? `WRONG CHAIN · ${wallet.chainId}` : 'ARC TESTNET') : undefined}
+        testId="pay-wallet"
+      >
 
         {!wallet ? (
           <div className="risk-body">
@@ -422,22 +410,15 @@ export function PayPage() {
             )}
           </div>
         )}
-      </section>
+      </Section>
 
       {resource !== null && (
-        <section className="section-card" data-testid="pay-resource">
-          <div className="section-heading">
-            <div className="section-title-wrap">
-              <div className="section-title">
-                {resource.description ?? 'Resource delivered'}
-              </div>
-              <div className="section-subtitle">
-                Paid on chain. The receipt is already in the agent&apos;s splitter, so the
-                lender&apos;s share settles from this payment without anyone chasing it.
-              </div>
-            </div>
-            <span className="section-kicker">{resource.settled ? 'SETTLED' : 'PENDING'}</span>
-          </div>
+        <Section
+          title={resource.description ?? 'Resource delivered'}
+          subtitle="Paid on chain. The receipt is already in the agent's splitter, so the lender's share settles from this payment without anyone chasing it."
+          kicker={resource.settled ? 'SETTLED' : 'PENDING'}
+          testId="pay-resource"
+        >
 
           <div className="risk-body">
             <div className="param-grid">
@@ -509,16 +490,14 @@ export function PayPage() {
               <pre className="code-block">{JSON.stringify(resource, null, 2)}</pre>
             </details>
           </div>
-        </section>
+        </Section>
       )}
 
-      <section className="section-card">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Why approval is separate</div>
-            <div className="section-subtitle">The one step worth reading before you click it</div>
-          </div>
-        </div>
+      <Section
+        title="Why approval is separate"
+        subtitle="The one step worth reading before you click it"
+        testId="pay-approval-note"
+      >
         <div className="risk-body">
           <div className="check-list">
             <li className="ok">
@@ -534,7 +513,7 @@ export function PayPage() {
             </li>
           </div>
         </div>
-      </section>
+      </Section>
 
       <PageFooter />
     </main>
