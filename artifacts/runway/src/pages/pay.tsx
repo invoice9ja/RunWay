@@ -284,6 +284,7 @@ export function PayPage() {
         kicker={price ? `${formatUsd(price)} USDC` : 'LOADING'}
         testId="pay-flow"
       >
+        <div className="section-body">
         <ol className="x402-steps" data-testid="pay-stages">
           {stages.map((stage) => (
             <li className={`x402-step progress-${stage.state}`} key={stage.id}>
@@ -309,6 +310,7 @@ export function PayPage() {
             {error}
           </p>
         )}
+        </div>
       </Section>
 
       <Section

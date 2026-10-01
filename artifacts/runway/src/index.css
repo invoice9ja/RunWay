@@ -960,11 +960,44 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
 /* ---- hosted x402 console ------------------------------------------------ */
 .x402-body { padding:19px 20px; display:flex; flex-direction:column; gap:14px; }
 .x402-actions { display:flex; flex-wrap:wrap; gap:9px; align-items:center; }
-.x402-steps { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:7px; }
-.x402-step { display:flex; gap:9px; align-items:flex-start; font-size:11px; color:#3d5245; }
-.x402-dot { width:6px; height:6px; border-radius:50%; margin-top:5px; flex:0 0 auto; background:#3f8a63; }
+.x402-steps { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:2px; }
+
+/*
+ * A step row, not a paragraph. It needs its own vertical padding and a resting
+ * background: the dot is small, the label is 11px, and without either the rows
+ * read as one dense block rather than a sequence.
+ */
+.x402-step {
+  display:flex;
+  gap:11px;
+  align-items:center;
+  padding:9px 11px;
+  border-radius:6px;
+  font-size:12px;
+  line-height:1.4;
+  color:#3d5245;
+  transition: background .18s;
+}
+
+/* The pending state is dimmed, so it needs a lower floor than the others. */
+.x402-step.progress-pending .x402-step-name,
+.x402-step.progress-pending .x402-step-detail { opacity:.5; }
+
+.x402-step.progress-active { background:#eef3ec; }
+.x402-step.progress-done   { background:transparent; }
+.x402-step.progress-failed { background:#fbf1ef; }
+
+.x402-step-name { flex:0 1 auto; min-width:min(190px, 42%); }
+.x402-step-detail {
+  flex:1 1 auto;
+  min-width:0;
+  font-size:11px;
+  color:var(--ink-muted);
+  overflow-wrap:anywhere;
+}
+.x402-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; background:#3f8a63; }
 .x402-dot.fail { background:#b4544a; }
-.x402-step-name { font-weight:600; min-width:190px; }
+.x402-step-name { font-weight:600; }
 .x402-step-detail { color:#75837b; }
 .x402-error { color:#a8453b; font-size:11px; }
 .x402-note { color:#829087; font-size:10px; line-height:1.6; }
@@ -1122,4 +1155,24 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
   .content { max-width: none; padding: 0; }
   .section-card { break-inside: avoid; box-shadow: none; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font: 9px var(--app-font-mono); color: #555; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Step rows, narrow screens.
+
+   The earlier 620px block sits above the step-row rules in this file, so it lost
+   on source order and the row kept the desktop gap. Stacked rows also need their
+   dot left-aligned rather than centred, or it floats above the label.
+   --------------------------------------------------------------------------- */
+@media (max-width: 620px) {
+  .x402-step {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 10px 12px;
+  }
+  .x402-step-name { min-width: 0; }
+  .x402-step-detail { width: 100%; }
+  .step-link { margin-left: 0; }
 }
