@@ -1,5 +1,6 @@
 import { EmptyState, PageFooter, PageHeader } from '@/components/app-shell';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
+import { Section } from '@/components/section';
 
 const statusOf = (loan: {
   flagged: boolean;
@@ -24,18 +25,12 @@ export function AdvancesPage() {
         subtitle="Working capital issued against expected x402 revenue."
       />
 
-      <section className="section-card" data-testid="section-loans">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Outstanding positions</div>
-            <div className="section-subtitle">
-              Repaid automatically as receipts settle
-            </div>
-          </div>
-          <span className="section-kicker">
-            {data ? `${data.summary.openLoans} open` : '—'}
-          </span>
-        </div>
+      <Section
+        title="Outstanding positions"
+        subtitle="Repaid automatically as receipts settle"
+        kicker={data ? `${data.summary.openLoans} open` : '—'}
+        testId="section-loans"
+      >
 
         {loans.length ? (
           <div className="data-table-wrap">
@@ -108,7 +103,7 @@ export function AdvancesPage() {
             detail="No working capital has been issued on Arc testnet yet."
           />
         )}
-      </section>
+      </Section>
 
       <PageFooter />
     </main>

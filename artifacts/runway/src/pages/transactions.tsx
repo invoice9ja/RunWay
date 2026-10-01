@@ -1,6 +1,7 @@
 import { Link } from 'wouter';
 
 import { EmptyState, PageFooter, PageHeader } from '@/components/app-shell';
+import { Section } from '@/components/section';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
 
 type ActivityRow = {
@@ -70,14 +71,12 @@ export function TransactionsPage() {
         }
       />
 
-      <section className="section-card" data-testid="section-transactions">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Activity</div>
-            <div className="section-subtitle">Receipts, settlements, advances and repayments</div>
-          </div>
-          <span className="section-kicker">{rows.length} events</span>
-        </div>
+      <Section
+        title="Activity"
+        subtitle="Receipts, settlements, advances and repayments"
+        kicker={`${rows.length} events`}
+        testId="section-transactions"
+      >
 
         {rows.length ? (
           <div className="data-table-wrap">
@@ -128,7 +127,7 @@ export function TransactionsPage() {
             detail="Activity appears once receipts and settlements land on chain."
           />
         )}
-      </section>
+      </Section>
 
       <PageFooter />
     </main>

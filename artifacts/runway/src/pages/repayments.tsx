@@ -1,4 +1,5 @@
 import { EmptyState, PageFooter, PageHeader } from '@/components/app-shell';
+import { Section } from '@/components/section';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
 
 export function RepaymentsPage() {
@@ -49,13 +50,7 @@ export function RepaymentsPage() {
         </div>
       </div>
 
-      <section className="section-card" data-testid="section-repayments">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Repayment history</div>
-            <div className="section-subtitle">Repaid events emitted by the vault</div>
-          </div>
-        </div>
+      <Section title="Repayment history" subtitle="Repaid events emitted by the vault" testId="section-repayments">
 
         {repayments.length ? (
           <div className="data-table-wrap">
@@ -103,7 +98,7 @@ export function RepaymentsPage() {
             detail="Repayment events appear once an advance is opened and receipts settle."
           />
         )}
-      </section>
+      </Section>
 
       <PageFooter />
     </main>

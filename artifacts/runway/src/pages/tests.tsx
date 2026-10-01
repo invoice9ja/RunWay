@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { PageFooter, PageHeader } from '@/components/app-shell';
+import { Section } from '@/components/section';
 
 type TestMeta = {
   id: string;
@@ -80,20 +81,7 @@ export function TestsPage() {
         subtitle="Each check reads the live Arc deployment. Nothing here is mocked."
       />
 
-      <section className="section-card">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Protocol checks</div>
-            <div className="section-subtitle">
-              Reads are free. Anything sending a transaction needs the keeper secret.
-            </div>
-          </div>
-          <span className="section-kicker">
-            {Object.keys(results).length === 0
-              ? 'NOT RUN'
-              : `${passed} PASS · ${failed} FAIL${gated ? ` · ${gated} GATED` : ''}`}
-          </span>
-        </div>
+      <Section title="Protocol checks" subtitle="Reads are free. Anything sending a transaction needs the keeper secret." kicker={Object.keys(results).length === 0 ? 'NOT RUN' : `${passed} PASS · ${failed} FAIL${gated ? ` · ${gated} GATED` : ''}`}>
 
         <div className="param-grid">
           <div className="param">
@@ -136,39 +124,37 @@ export function TestsPage() {
               : 'Not authenticated. Costly checks will return 401.'}
           </div>
         </div>
-      </section>
+      </Section>
 
       {tests?.map((test) => {
         const result = results[test.id];
         return (
-          <section className="section-card" key={test.id} data-testid={`test-${test.id}`}>
-            <div className="section-heading">
-              <div className="section-title-wrap">
-                <div className="section-title">{test.title}</div>
-                <div className="section-subtitle">{test.description}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="section-kicker">
-                  {result
-                    ? result.pass
-                      ? 'PASS'
-                      : result.status === 401
-                        ? 'GATED'
-                        : 'FAIL'
-                    : test.costly
-                      ? 'COSTLY'
-                      : 'READY'}
-                </span>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={running !== null}
-                  onClick={() => runOne(test.id)}
-                >
-                  {running === test.id ? 'Running…' : 'Run'}
-                </button>
-              </div>
-            </div>
+          <Section
+            title={test.title}
+            subtitle={test.description}
+            kicker={
+              result
+                ? result.pass
+                  ? 'PASS'
+                  : result.status === 401
+                    ? 'GATED'
+                    : 'FAIL'
+                : test.costly
+                  ? 'COSTLY'
+                  : 'READY'
+            }
+            actions={
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={running !== null}
+                onClick={() => runOne(test.id)}
+              >
+                {running === test.id ? 'Running…' : 'Run'}
+              </button>
+            }
+            testId={`test-${test.id}`}
+          >
 
             <div className="risk-body">
               <div className="check-list">
@@ -195,21 +181,11 @@ export function TestsPage() {
                 </>
               )}
             </div>
-          </section>
+          </Section>
         );
       })}
 
-      <section className="section-card" data-testid="section-seller">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Paid endpoint</div>
-            <div className="section-subtitle">
-              The SDK seller hosted on Vercel. An unpaid request gets the 402; a paid
-              one is verified against the USDC domain and settled on chain.
-            </div>
-          </div>
-          <span className="section-kicker">SERVERLESS</span>
-        </div>
+      <Section title="Paid endpoint" subtitle="The SDK seller hosted on Vercel. An unpaid request gets the 402; a paid one is verified against the USDC domain and settled on chain." kicker="SERVERLESS" testId="section-seller">
         <div className="risk-body">
           <div className="x402-actions">
             <a
@@ -234,7 +210,7 @@ export function TestsPage() {
             </a>
           </div>
         </div>
-      </section>
+      </Section>
 
       <PageFooter />
     </main>

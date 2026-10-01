@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Check, RotateCcw, Save } from 'lucide-react';
 
 import { PageFooter, PageHeader } from '@/components/app-shell';
+import { Section } from '@/components/section';
 
 const DEPLOYED = {
   vault: '0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be',
@@ -75,15 +76,7 @@ export function ContractsPage() {
         subtitle="Addresses deployed on Arc testnet, plus a local override."
       />
 
-      <section className="section-card" data-testid="section-deployed">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Deployed contracts</div>
-            <div className="section-subtitle">
-              Arc testnet, chain 5042002 — source verified on the explorer
-            </div>
-          </div>
-        </div>
+      <Section title="Deployed contracts" subtitle="Arc testnet, chain 5042002 — source verified on the explorer" testId="section-deployed">
         <div className="contract-list">
           {deployedRows.map((row) => (
             <div className="contract-row" key={row.address}>
@@ -111,18 +104,9 @@ export function ContractsPage() {
             </div>
           ))}
         </div>
-      </section>
+      </Section>
 
-      <section className="section-card" data-testid="section-configuration">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Local override</div>
-            <div className="section-subtitle">
-              Stored in this browser only; does not change chain reads
-            </div>
-          </div>
-          <span className="section-kicker">LOCAL</span>
-        </div>
+      <Section title="Local override" subtitle="Stored in this browser only; does not change chain reads" kicker="LOCAL" testId="section-configuration">
         <div className="config-body">
           <form onSubmit={save} noValidate data-testid="form-contract-config">
             <div className="config-grid">
@@ -181,7 +165,7 @@ export function ContractsPage() {
             </div>
           </div>
         </div>
-      </section>
+      </Section>
 
       <PageFooter />
     </main>

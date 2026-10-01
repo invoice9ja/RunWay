@@ -1,6 +1,7 @@
 import { Link } from 'wouter';
 
 import { PageFooter, PageHeader } from '@/components/app-shell';
+import { Section } from '@/components/section';
 import { useChainStatus } from '@/lib/chain-status';
 
 export function ThreatsPage() {
@@ -66,18 +67,16 @@ export function ThreatsPage() {
         subtitle="Open risks in the current design, and what was fixed."
       />
 
-      <section className="section-card" data-testid="section-threats">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Findings</div>
-            <div className="section-subtitle">
-              Sorted by severity — these block real funds
-            </div>
-          </div>
-          <span className="section-kicker">
+      <Section
+        title="Findings"
+        subtitle="Sorted by severity — these block real funds"
+        kicker={
+          <>
             {findings.length} open &middot; {resolved.length} fixed
-          </span>
-        </div>
+          </>
+        }
+        testId="section-threats"
+      >
         <div className="finding-list">
           {[...findings]
             .sort((a, b) => order[a.severity] - order[b.severity])
@@ -100,15 +99,9 @@ export function ThreatsPage() {
             </article>
           ))}
         </div>
-      </section>
+      </Section>
 
-      <section className="section-card">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Deployment posture</div>
-            <div className="section-subtitle">What is and is not proven</div>
-          </div>
-        </div>
+      <Section title="Deployment posture" subtitle="What is and is not proven">
         <div className="risk-body">
           <div className="risk-level">
             <span className="risk-badge">Prototype</span> Not audited
@@ -148,7 +141,7 @@ export function ThreatsPage() {
             View deployed addresses
           </Link>
         </div>
-      </section>
+      </Section>
 
       <PageFooter />
     </main>

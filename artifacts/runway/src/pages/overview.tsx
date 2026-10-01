@@ -2,6 +2,7 @@ import { Link } from 'wouter';
 import { ArrowDownRight, Landmark, Layers3, Wallet } from 'lucide-react';
 
 import { ChainNotice, PageFooter, PageHeader } from '@/components/app-shell';
+import { Section } from '@/components/section';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
 
 export function OverviewPage() {
@@ -68,16 +69,16 @@ export function OverviewPage() {
         ))}
       </div>
 
-      <section className="section-card" data-testid="section-snapshot">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Protocol parameters</div>
-            <div className="section-subtitle">Read from the vault on chain</div>
-          </div>
+      <Section
+        title="Protocol parameters"
+        subtitle="Read from the vault on chain"
+        actions={
           <Link className="row-link" href="/contracts">
             Contracts
           </Link>
-        </div>
+        }
+        testId="section-snapshot"
+      >
         <div className="param-grid">
           {data ? (
             [
@@ -97,17 +98,9 @@ export function OverviewPage() {
             <p className="empty-copy">Awaiting onchain reads…</p>
           )}
         </div>
-      </section>
+      </Section>
 
-      <section className="section-card" aria-labelledby="flow-title">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title" id="flow-title">
-              Receipt path
-            </div>
-            <div className="section-subtitle">How a payment becomes repayment</div>
-          </div>
-        </div>
+      <Section title="Receipt path" subtitle="How a payment becomes repayment">
         <div className="flow-body">
           <ol className="flow-track">
             <li className="flow-node">
@@ -131,7 +124,7 @@ export function OverviewPage() {
             Run the hosted flow
           </Link>
         </div>
-      </section>
+      </Section>
 
       <PageFooter />
     </main>

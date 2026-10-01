@@ -1,6 +1,7 @@
 import { Link } from 'wouter';
 
 import { EmptyState, PageFooter, PageHeader } from '@/components/app-shell';
+import { Section } from '@/components/section';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
 
 export function SplittersPage() {
@@ -15,18 +16,16 @@ export function SplittersPage() {
         subtitle="Seller routing contracts registered on the Runway factory."
       />
 
-      <section className="section-card" data-testid="section-splitters">
-        <div className="section-heading">
-          <div className="section-title-wrap">
-            <div className="section-title">Registered splitters</div>
-            <div className="section-subtitle">
-              Every x402 receipt is forwarded to one of these contracts
-            </div>
-          </div>
+      <Section
+        title="Registered splitters"
+        subtitle="Every x402 receipt is forwarded to one of these contracts"
+        actions={
           <Link className="row-link" href="/transactions">
             Transactions
           </Link>
-        </div>
+        }
+        testId="section-splitters"
+      >
 
         {rows.length ? (
           <div className="data-table-wrap">
@@ -87,7 +86,7 @@ export function SplittersPage() {
             detail="The factory has not registered a routing contract yet."
           />
         )}
-      </section>
+      </Section>
 
       {rows.length > 0 && (
         <p className="page-note">
