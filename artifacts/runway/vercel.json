@@ -32,6 +32,9 @@
     },
     "api/tests/run.ts": {
       "maxDuration": 60
+    },
+    "api/demo/sell-x402.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [

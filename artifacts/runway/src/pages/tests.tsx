@@ -13,12 +13,14 @@ type TestMeta = {
 type TestResult = {
   id: string;
   title: string;
-  expect: string;
+  expect?: string;
   pass: boolean;
-  detail: string;
+  /** The reason. Endpoints return `detail` on a completed check and `error` on a refusal. */
+  detail?: string;
+  error?: string;
   data?: unknown;
   ms?: number;
-  error?: string;
+  status?: number;
 };
 
 export function TestsPage() {
@@ -42,7 +44,7 @@ export function TestsPage() {
         headers: secret ? { 'x-keeper-secret': secret } : {},
       });
       const payload = (await response.json()) as TestResult;
-      setResults((prev) => ({ ...prev, [id]: payload }));
+      setResults((prev) => ({ ...prev, [id]: { ...payload, status: response.status } }));
     } catch (error) {
       setResults((prev) => ({
         ...prev,
@@ -67,7 +69,8 @@ export function TestsPage() {
   };
 
   const passed = Object.values(results).filter((r) => r.pass).length;
-  const failed = Object.values(results).filter((r) => !r.pass).length;
+  const gated = Object.values(results).filter((r) => r.status === 401).length;
+  const failed = Object.values(results).filter((r) => !r.pass && r.status !== 401).length;
 
   return (
     <main className="content">
@@ -88,7 +91,7 @@ export function TestsPage() {
           <span className="section-kicker">
             {Object.keys(results).length === 0
               ? 'NOT RUN'
-              : `${passed} PASS · ${failed} FAIL`}
+              : `${passed} PASS · ${failed} FAIL${gated ? ` · ${gated} GATED` : ''}`}
           </span>
         </div>
 
@@ -146,7 +149,15 @@ export function TestsPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="section-kicker">
-                  {result ? (result.pass ? 'PASS' : 'FAIL') : test.costly ? 'COSTLY' : 'READY'}
+                  {result
+                    ? result.pass
+                      ? 'PASS'
+                      : result.status === 401
+                        ? 'GATED'
+                        : 'FAIL'
+                    : test.costly
+                      ? 'COSTLY'
+                      : 'READY'}
                 </span>
                 <button
                   className="secondary-button"
@@ -173,7 +184,9 @@ export function TestsPage() {
                     data-testid={`result-${test.id}`}
                     style={{ color: result.pass ? '#2f6b4a' : '#9c3a30' }}
                   >
-                    {result.pass ? 'PASS' : 'FAIL'} — {result.detail}
+                    {result.pass ? 'PASS' : result.status === 401 ? 'GATED' : 'FAIL'}
+                    {' — '}
+                    {result.detail ?? result.error ?? 'no reason returned'}
                     {result.ms !== undefined && ` (${result.ms}ms)`}
                   </p>
                   {result.data !== undefined && (
@@ -186,30 +199,39 @@ export function TestsPage() {
         );
       })}
 
-      <section className="section-card">
+      <section className="section-card" data-testid="section-seller">
         <div className="section-heading">
           <div className="section-title-wrap">
             <div className="section-title">Paid endpoint</div>
             <div className="section-subtitle">
-              The SDK seller hosted on Vercel. Buy from it to settle a real payment.
+              The SDK seller hosted on Vercel. An unpaid request gets the 402; a paid
+              one is verified against the USDC domain and settled on chain.
             </div>
           </div>
+          <span className="section-kicker">SERVERLESS</span>
         </div>
         <div className="risk-body">
-          <div className="check-list">
-            <li className="ok">
-              <a href="/api/demo/sell" target="_blank" rel="noreferrer noopener">
-                Unpaid request returns a 402 challenge
-              </a>
-            </li>
-            <li className="ok">
-              <a href="/api/demo/sell/.well-known/x402" target="_blank" rel="noreferrer noopener">
-                Payment requirements, for pricing a call before paying
-              </a>
-            </li>
-            <li className="ok">
-              <a href="/x402">Run the full loop from the dashboard</a>
-            </li>
+          <div className="x402-actions">
+            <a
+              className="primary-button"
+              href="/api/demo/sell"
+              target="_blank"
+              rel="noreferrer noopener"
+              data-testid="seller-402"
+            >
+              Request without paying (expect 402)
+            </a>
+            <a
+              className="secondary-button"
+              href="/api/demo/sell-x402"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              Payment requirements
+            </a>
+            <a className="secondary-button" href="/x402">
+              Run the full loop
+            </a>
           </div>
         </div>
       </section>

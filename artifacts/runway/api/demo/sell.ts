@@ -56,7 +56,9 @@ const challenge = (resource: string, price: bigint): PaymentChallenge => ({
 
 const handler: Handler = async (req, res) => {
   const origin = baseUrl(req);
-  const resource = `${origin}/api/demo/sell`;
+  // Advertise the stable resource path so a buyer paying /resource is told about
+  // /resource, not about the bare seller endpoint.
+  const resource = `${origin}/api/demo/sell/resource`;
   const priceParam = req.query.price;
   let price = PUBLIC_MAX_AMOUNT;
   if (typeof priceParam === 'string' && /^\d+$/.test(priceParam)) {

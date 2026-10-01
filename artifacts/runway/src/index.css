@@ -793,6 +793,43 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
 .check-list li::before { position: absolute; left: 0; top: 0; font-weight: 700; }
 .check-list li.ok::before { content: '\2713'; color: #3f8a63; }
 .check-list li.bad::before { content: '\2715'; color: #b4544a; }
+
+/*
+ * Links inside a check list inherited the list item's colour and the global
+ * no-underline rule, so they rendered indistinguishable from plain text and
+ * read as static labels rather than something to click.
+ */
+.check-list a,
+.risk-body a,
+.page-note a {
+  color: #2f6b4a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.check-list a:hover,
+.risk-body a:hover,
+.page-note a:hover {
+  color: #1f4a34;
+}
+
+/* A gated check should read as unavailable, not as a plain failure. */
+.check-list li.gated { color: #8a7a52; }
+.check-list li.gated::before { content: '\26BF'; color: #b08d3c; }
+
+.step-link {
+  margin-left: 8px;
+  font: 9px var(--app-font-mono);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #2f6b4a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.x402-step.progress-done .x402-step-name { color: #2f6b4a; }
+.x402-step.progress-failed .x402-step-name { color: #9c3a30; }
 .explainer { margin: 0; padding: 19px 20px 19px 40px; display: grid; gap: 11px; color: #5d7168; font-size: 11px; line-height: 1.7; }
 .explainer strong { color: #274b3d; }
 
