@@ -35,8 +35,14 @@ const MAX_CHUNKS = 8;
  * stale, the next status poll picks them up, and the payload reports chunk
  * failures so a persistent problem is visible.
  */
-const RETRIES = 2;
-const BACKOFF_MS = 400;
+/**
+ * The public Arc endpoint rate-limits under a burst of wide-range reads, and
+ * doing three of them back to back is reliably enough to trip it. Two retries at
+ * 400ms was not enough to ride it out, which is why every read reported
+ * retries and some chunks failed.
+ */
+const RETRIES = 4;
+const BACKOFF_MS = 700;
 
 export type LogRow = {
   transaction: `0x${string}`;
@@ -129,7 +135,10 @@ export async function fetchLogsForAddress(
     for (let attempt = 0; attempt <= RETRIES && !resolved; attempt += 1) {
       if (attempt > 0) {
         stats.retries += 1;
-        await sleep(BACKOFF_MS * attempt);
+        // Jitter: without it every failing chunk retries on the same schedule
+        // and the retries keep the limiter down rather than letting it recover.
+        const jitter = Math.floor(Math.random() * BACKOFF_MS);
+        await sleep(BACKOFF_MS * attempt + jitter);
       }
       stats.calls += 1;
       bucket.calls += 1;

@@ -188,8 +188,8 @@ const handler: Handler = async (_req, res) => {
       ...loanRows,
       ...receiptRows,
     ].map((row) => row.block);
-    const times = await blockTimes(client, allBlocks);
-    const timeOf = (block: number) => isoTime(times.get(block));
+    const stamps = await blockTimes(client, allBlocks);
+    const timeOf = (block: number) => isoTime(stamps.times.get(block));
 
     const repayments = repaidRows.slice(0, 25).map((row) => ({
       transaction: row.transaction,
@@ -270,7 +270,18 @@ const handler: Handler = async (_req, res) => {
       settlements,
       receipts,
       loansOpened,
-      timestampedBlocks: times.size,
+      /**
+       * Blocks whose timestamp was resolved for this read. 0 means every lookup
+       * failed, which is worth knowing; a small number just means most blocks
+       * were already cached from an earlier read.
+       */
+      blockTimestamps: {
+        requested: stamps.requested,
+        resolved: stamps.times.size,
+        fromCache: stamps.fromCache,
+        fetched: stamps.fetched,
+        failed: stamps.failed,
+      },
       rpc: config.rpcUrl,
       indexer: {
         fromBlock: Number(fromBlock),

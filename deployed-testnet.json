@@ -7,8 +7,8 @@
   "splitter": "0x06cebc9403c00d972e014e452509d04c7c350880",
   "usdc": "0x3600000000000000000000000000000000000000",
   "admin": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
-  "underwriter": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
-  "watcher": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+  "underwriter": "0xe5A83d9efa7Be9dA6CAe31d533A60715407bF553",
+  "watcher": "0x9921130CDA8E78d111761e130e2BD7b22acDb292",
   "timestamp": "2026-10-01T00:00:00.000Z",
   "explorer": "https://explorer.testnet.arc.io",
   "explorerKind": "blockscout",
@@ -27,6 +27,40 @@
   "notes": [
     "Everything here is Arc TESTNET. The contracts do not exist on Arc mainnet.",
     "The splitter is a minimal proxy clone of splitterImpl, deployed by the factory.",
-    "admin, underwriter and watcher are the same account, which is a testnet shortcut. Real deployments should separate them."
-  ]
+    "Roles are separated: admin, underwriter, watcher and settler are four distinct accounts.",
+    "The deployer is still the agent and the demo payer, which is a testnet shortcut."
+  ],
+  "settler": "0x994203C52093B0558361878ca2688267610914E3",
+  "roles": {
+    "admin": {
+      "address": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+      "roles": [
+        "DEFAULT_ADMIN_ROLE"
+      ],
+      "purpose": "deposit, withdraw free funds, pause, register splitters",
+      "note": "Also the agent and the demo payer. Testnet only."
+    },
+    "underwriter": {
+      "address": "0xe5A83d9efa7Be9dA6CAe31d533A60715407bF553",
+      "roles": [
+        "UNDERWRITER_ROLE"
+      ],
+      "purpose": "opens advances via openLoan",
+      "note": "Separated from the admin so a compromised scorer cannot move funds or pause the vault."
+    },
+    "watcher": {
+      "address": "0x9921130CDA8E78d111761e130e2BD7b22acDb292",
+      "roles": [
+        "WATCHER_ROLE"
+      ],
+      "purpose": "flags splitters via flagLoan",
+      "note": "Separated from the admin and from the underwriter so a flagger cannot originate credit."
+    },
+    "settler": {
+      "address": "0x994203C52093B0558361878ca2688267610914E3",
+      "roles": [],
+      "purpose": "signs EIP-3009 payments and routes receipts in the hosted seller",
+      "note": "No vault role. Holds a small float only."
+    }
+  }
 }

@@ -27,31 +27,60 @@ async function fetchBlockTime(client: RunwayPublicClient, blockNumber: number): 
   return seconds;
 }
 
+export type BlockTimeResult = {
+  times: Map<number, number>;
+  /** Distinct blocks asked about. */
+  requested: number;
+  /** Served from cache without an RPC call. */
+  fromCache: number;
+  /** Actually fetched this read. */
+  fetched: number;
+  /** Lookups that failed; those rows render as no timestamp. */
+  failed: number;
+};
+
 /**
  * Resolve timestamps for a set of blocks, in parallel but bounded.
  *
  * Failures resolve to undefined rather than throwing: a missing timestamp on one
  * row must not cost the reader the whole page, and a status read that throws
  * degrades to stale cache, which reads as "no activity".
+ *
+ * The counts are reported because "resolved: 0" and "resolved: 6 of 6, all
+ * cached" mean very different things when reading the payload.
  */
 export async function blockTimes(
   client: RunwayPublicClient,
   blockNumbers: readonly number[],
-): Promise<Map<number, number>> {
-  const unique = [...new Set(blockNumbers)].filter((n) => !cache.has(n));
-  const out = new Map<number, number>([...cache].filter(([k]) => blockNumbers.includes(k)));
+): Promise<BlockTimeResult> {
+  const unique = [...new Set(blockNumbers)];
+  const todo = unique.filter((n) => !cache.has(n));
 
-  for (let i = 0; i < unique.length; i += MAX_CONCURRENT) {
-    const batch = unique.slice(i, i + MAX_CONCURRENT);
+  const times = new Map<number, number>();
+  for (const n of unique) {
+    const hit = cache.get(n);
+    if (hit !== undefined) times.set(n, hit);
+  }
+
+  let failed = 0;
+  for (let i = 0; i < todo.length; i += MAX_CONCURRENT) {
+    const batch = todo.slice(i, i + MAX_CONCURRENT);
     const settled = await Promise.all(
       batch.map((n) => fetchBlockTime(client, n).catch(() => undefined)),
     );
     settled.forEach((seconds, index) => {
-      if (seconds !== undefined) out.set(batch[index], seconds);
+      if (seconds === undefined) failed += 1;
+      else times.set(batch[index], seconds);
     });
   }
 
-  return out;
+  return {
+    times,
+    requested: unique.length,
+    fromCache: unique.length - todo.length,
+    fetched: todo.length - failed,
+    failed,
+  };
 }
 
 /** Seconds since epoch for a block, or undefined when it could not be read. */
