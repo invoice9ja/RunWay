@@ -248,7 +248,7 @@ const handler: Handler = async (_req, res) => {
     }
     res.status(502).json({
       error: error instanceof Error ? error.message : String(error),
-      hint: 'The dashboard could not complete its Base Sepolia reads.',
+      hint: 'The dashboard could not complete its Arc testnet reads.',
     });
   }
 };

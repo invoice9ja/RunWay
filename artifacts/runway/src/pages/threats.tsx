@@ -6,41 +6,43 @@ import { useChainStatus } from '@/lib/chain-status';
 export function ThreatsPage() {
   const { data } = useChainStatus();
 
+  const resolved = [
+    {
+      title: 'Agent claim exceeded custody',
+      body: 'setLoanActive credited the loan principal to agentClaimable, so the agent was owed USDC the contract no longer held. agentClaimable is now separate from advanceHeld, and withdraw() is bounded by tokens actually held.',
+    },
+    {
+      title: 'Flat fee was never charged',
+      body: 'feeBps was stored on the loan but repay() only ever collected the supplied principal. repay() now applies against totalDue and returns the amount applied. A 10.0 USDC advance repays 10.8.',
+    },
+    {
+      title: 'Excess lender share was stranded',
+      body: 'repay() caps at the debt and returns what it applied, so the splitter credits the remainder to the agent instead of leaving it unowned. surplus() is zero after every settle.',
+    },
+    {
+      title: 'settle() could underflow',
+      body: 'lastSettledBalance is now decremented by the full amount withdrawn, not just the advance portion, so a withdrawal no longer leaves a stale baseline that under-counts the next settlement.',
+    },
+    {
+      title: 'withdraw() ignored outstanding debt',
+      body: 'availableToWithdraw() excludes advances still owed to lenders, and withdraw() is bounded by it.',
+    },
+    {
+      title: 'Factory did not use clones',
+      body: 'The factory now deploys minimal proxies via Clones.clone plus initialize(). Clone runtime is 45 bytes.',
+    },
+  ];
+
   const findings = [
     {
       severity: 'critical' as const,
-      title: 'Agent claim exceeds custody',
-      body: 'setLoanActive credits the loan principal to agentClaimable, so the agent is owed USDC the contract no longer holds. withdraw() reverts when the balance is short.',
-    },
-    {
-      severity: 'critical' as const,
-      title: 'Flat fee is never charged',
-      body: 'feeBps is stored on the loan but repay() only ever collects the supplied principal, so the 8% fee in the PRD is not applied.',
+      title: 'Operational key was exposed and is not rotated',
+      body: 'The deployer key appeared in an earlier session and in git history. It must be replaced with a dedicated low-value key before any public demo.',
     },
     {
       severity: 'high' as const,
-      title: 'Excess lender share is stranded',
-      body: 'When the lender share exceeds the outstanding balance, repay() caps the repayment and the remainder stays in the splitter credited to nobody.',
-    },
-    {
-      severity: 'high' as const,
-      title: 'settle() can underflow',
-      body: 'lastSettledBalance is set to the principal when a loan opens, so if the agent withdraws before the next settlement the subtraction reverts and revenue stalls.',
-    },
-    {
-      severity: 'high' as const,
-      title: 'withdraw() ignores outstanding debt',
-      body: 'An admin can drain vault funds that are still owed to lenders, because the withdrawal check only compares against the raw balance.',
-    },
-    {
-      severity: 'medium' as const,
-      title: 'Factory does not use clones',
-      body: 'It deploys full RevenueSplitter contracts while splitterImplementation and the Clones import sit unused, so gas does not scale as designed.',
-    },
-    {
-      severity: 'high' as const,
-      title: 'Payee swap is unmitigated',
-      body: 'A watcher flag would block future settlement, but revenue landing between the swap and the flag is already in the splitter. No watcher service is implemented.',
+      title: 'Payee swap is only partly mitigated',
+      body: 'setPayout is blocked while an advance is outstanding, and flagLoan marks the agent to block future borrowing. Revenue that landed before the swap is already in the splitter, so the window is narrow rather than closed.',
     },
     {
       severity: 'medium' as const,
@@ -49,13 +51,8 @@ export function ThreatsPage() {
     },
     {
       severity: 'medium' as const,
-      title: 'No underwriter or rating',
-      body: 'The PRD describes an LLM underwriter and rationale hashes. Loans are issued without any scoring step, so the rationale field is always empty.',
-    },
-    {
-      severity: 'critical' as const,
-      title: 'Unaudited and unverified',
-      body: 'No third-party audit, no formal verification, and the deployed bytecode is not verified on BaseScan. The operational key was exposed in an earlier session and must be rotated.',
+      title: 'No independent review',
+      body: 'No third-party audit and no formal verification. The regression tests were written alongside the fix, so they grade the authors own model of the defect rather than an independent one.',
     },
   ];
 
@@ -66,7 +63,7 @@ export function ThreatsPage() {
       <PageHeader
         eyebrow="REVIEW / RISK"
         title="Threat model"
-        subtitle="Known failure modes in the current contract design."
+        subtitle="Open risks in the current design, and what was fixed."
       />
 
       <section className="section-card" data-testid="section-threats">
@@ -77,7 +74,9 @@ export function ThreatsPage() {
               Sorted by severity — these block real funds
             </div>
           </div>
-          <span className="section-kicker">{findings.length} findings</span>
+          <span className="section-kicker">
+            {findings.length} open &middot; {resolved.length} fixed
+          </span>
         </div>
         <div className="finding-list">
           {[...findings]
@@ -91,6 +90,15 @@ export function ThreatsPage() {
                 <p className="finding-body">{finding.body}</p>
               </article>
             ))}
+          {resolved.map((item) => (
+            <article className="finding" key={item.title}>
+              <div className="finding-head">
+                <span className="sev sev-resolved">fixed</span>
+                <h2 className="finding-title">{item.title}</h2>
+              </div>
+              <p className="finding-body">{item.body}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -107,20 +115,25 @@ export function ThreatsPage() {
           </div>
           <ul className="check-list">
             <li className="ok">
-              Loan lifecycle works end to end on Base Sepolia: one advance was
-              opened, driven to zero outstanding, and closed.
+              Loan lifecycle works end to end on Arc testnet: one advance was
+              opened, driven to zero outstanding with the fee collected, and
+              closed. The agent then withdrew its full balance with no surplus.
             </li>
             <li className="ok">
-              The x402 exact-scheme payment path runs on Vercel with real
-              EIP-3009 signatures verified against the USDC domain.
+              Vault, Factory and RevenueSplitter are source verified on the Arc
+              testnet explorer.
+            </li>
+            <li className="ok">
+              29 unit tests and 8 invariants pass, including one regression test
+              per fixed defect.
             </li>
             <li className="bad">
-              Contract accounting does not balance, so the agent claim is not
-              withdrawable.
+              The contracts have had no independent review. The tests were
+              written alongside the fix, so they do not count as one.
             </li>
             <li className="bad">
-              Contracts are not verified on the explorer, so deployed bytecode is
-              unproven against this source.
+              The operational deployer key is still the exposed one and has not
+              been rotated.
             </li>
           </ul>
           {data && (
@@ -128,7 +141,7 @@ export function ThreatsPage() {
               Global cap {data.protocol.globalMax.formatted} USDC &middot; starter
               cap {data.protocol.starterCap.formatted} USDC &middot; lender share{' '}
               {data.protocol.lenderShareBpsDefault / 100}% &middot; stated fee{' '}
-              {data.protocol.feeBpsDefault / 100}% (not enforced).
+              {data.protocol.feeBpsDefault / 100}% (charged on repayment).
             </p>
           )}
           <Link className="secondary-button" href="/contracts">

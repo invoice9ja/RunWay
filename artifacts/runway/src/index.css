@@ -747,6 +747,7 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
 .sev-critical { background: #f8e4e1; color: #9c3a30; }
 .sev-high { background: #f7eddc; color: #7d5c1c; }
 .sev-medium { background: #e9eef1; color: #4c6577; }
+.sev-resolved { background: #e4f0e9; color: #2f6b4a; }
 .check-list { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 9px; }
 .check-list li { position: relative; padding-left: 22px; font-size: 11px; line-height: 1.65; color: #5d7168; }
 .check-list li::before { position: absolute; left: 0; top: 0; font-weight: 700; }

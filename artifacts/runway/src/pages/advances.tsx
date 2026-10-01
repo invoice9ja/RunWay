@@ -105,7 +105,7 @@ export function AdvancesPage() {
           <EmptyState
             id="loans"
             label="No advances read"
-            detail="No working capital has been issued on Base Sepolia yet."
+            detail="No working capital has been issued on Arc testnet yet."
           />
         )}
       </section>

@@ -9,29 +9,29 @@ const readAddress = (key: string, fallback: Address): Address =>
   read(key, fallback).trim() as Address;
 
 export const config = {
-  /** Base Sepolia public RPC. No API key, so it is safe to ship in the client too. */
-  rpcUrl: read('RUNWAY_RPC_URL', 'https://sepolia.base.org'),
-  chainId: Number(read('RUNWAY_CHAIN_ID', '84532')),
+  /** Arc testnet public RPC. No API key, so it is safe to ship in the client too. */
+  rpcUrl: read('RUNWAY_RPC_URL', 'https://rpc.testnet.arc.network'),
+  chainId: Number(read('RUNWAY_CHAIN_ID', '5042002')),
   /** x402 `network` identifier. */
-  network: read('RUNWAY_NETWORK', 'base-sepolia'),
-  explorer: read('RUNWAY_EXPLORER_URL', 'https://sepolia.basescan.org'),
+  network: read('RUNWAY_NETWORK', 'arc-testnet'),
+  explorer: read('RUNWAY_EXPLORER_URL', 'https://explorer.testnet.arc.io'),
 
   usdc: readAddress(
     'RUNWAY_USDC_ADDRESS',
-    '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    '0x3600000000000000000000000000000000000000',
   ),
   vault: readAddress(
     'RUNWAY_VAULT_ADDRESS',
-    '0x50521815D832eb80BabBA0f888c686Fb224f2Dd4',
+    '0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be',
   ),
   factory: readAddress(
     'RUNWAY_FACTORY_ADDRESS',
-    '0xC278850c7194a8ecD8b81A223847F995Ad56fCdf',
+    '0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F',
   ),
   /** Agent revenue router. Every x402 receipt is forwarded here. */
   splitter: readAddress(
     'RUNWAY_SPLITTER_ADDRESS',
-    '0x96030e714e14b848445b40dfc327d828a3f474f6',
+    '0x06cebc9403c00d972e014e452509d04c7c350880',
   ),
 
   /**

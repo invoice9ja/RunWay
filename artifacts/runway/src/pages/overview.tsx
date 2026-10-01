@@ -12,7 +12,7 @@ export function OverviewPage() {
       <PageHeader
         eyebrow="WORKING CAPITAL / CONTROL ROOM"
         title="Operations overview"
-        subtitle="x402 revenue routing and advance repayment on Base Sepolia."
+        subtitle="x402 revenue routing and advance repayment on Arc testnet."
       />
       <ChainNotice />
 

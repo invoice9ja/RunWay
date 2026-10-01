@@ -62,7 +62,7 @@ export function TransactionsPage() {
       <PageHeader
         eyebrow="LEDGER / ACTIVITY"
         title="Transactions"
-        subtitle="Every protocol event observed on Base Sepolia, newest first."
+        subtitle="Every protocol event observed on Arc testnet, newest first."
         action={
           <Link className="secondary-button" href="/x402">
             Run a payment

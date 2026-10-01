@@ -4,12 +4,12 @@ import { Check, RotateCcw, Save } from 'lucide-react';
 import { PageFooter, PageHeader } from '@/components/app-shell';
 
 const DEPLOYED = {
-  vault: '0x50521815D832eb80BabBA0f888c686Fb224f2Dd4',
-  factory: '0xC278850c7194a8ecD8b81A223847F995Ad56fCdf',
-  splitter: '0x96030e714e14b848445b40dfc327d828a3f474f6',
-  vaultImpl: '0xb220f46e18166F5e4DAe0B8EB826ab27c8305110',
-  usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-  explorer: 'https://sepolia.basescan.org',
+  vault: '0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be',
+  factory: '0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F',
+  splitter: '0x06cebc9403c00d972e014e452509d04c7c350880',
+  splitterImpl: '0xc880AF5d5aC3ea27c26C47D132661A710C245ea5',
+  usdc: '0x3600000000000000000000000000000000000000',
+  explorer: 'https://explorer.testnet.arc.io',
 };
 
 type Config = { vault: string; factory: string };
@@ -63,7 +63,7 @@ export function ContractsPage() {
     { label: 'RunwayVault', address: DEPLOYED.vault, role: 'Holds lender funds, issues and repays advances' },
     { label: 'RunwayFactory', address: DEPLOYED.factory, role: 'Registers and discovers splitters' },
     { label: 'RevenueSplitter', address: DEPLOYED.splitter, role: 'Live agent routing contract' },
-    { label: 'Splitter deployment', address: DEPLOYED.vaultImpl, role: 'First splitter deployed by the factory' },
+    { label: 'Splitter implementation', address: DEPLOYED.splitterImpl, role: 'Clone implementation used by the factory' },
     { label: 'USDC', address: DEPLOYED.usdc, role: 'FiatTokenV2 with EIP-3009 support' },
   ];
 
@@ -72,7 +72,7 @@ export function ContractsPage() {
       <PageHeader
         eyebrow="CONFIGURATION / DEPLOYMENTS"
         title="Contracts"
-        subtitle="Addresses deployed on Base Sepolia, plus a local override."
+        subtitle="Addresses deployed on Arc testnet, plus a local override."
       />
 
       <section className="section-card" data-testid="section-deployed">
@@ -80,7 +80,7 @@ export function ContractsPage() {
           <div className="section-title-wrap">
             <div className="section-title">Deployed contracts</div>
             <div className="section-subtitle">
-              Base Sepolia, chain 84532 — not yet verified on the explorer
+              Arc testnet, chain 5042002 — source verified on the explorer
             </div>
           </div>
         </div>

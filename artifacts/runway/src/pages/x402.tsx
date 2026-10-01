@@ -17,7 +17,7 @@ export function X402Page() {
           <div className="section-title-wrap">
             <div className="section-title">Buyer → 402 → signature → settlement</div>
             <div className="section-subtitle">
-              Every step executes on Vercel against Base Sepolia
+              Every step executes on Vercel against Arc testnet
             </div>
           </div>
           <span className="section-kicker">SERVERLESS</span>
@@ -96,7 +96,7 @@ export function X402Page() {
         <div className="section-heading">
           <div className="section-title-wrap">
             <div className="section-title">How it works</div>
-            <div className="section-subtitle">The x402 exact scheme on Base Sepolia</div>
+            <div className="section-subtitle">The x402 exact scheme on Arc testnet</div>
           </div>
         </div>
         <ol className="explainer">

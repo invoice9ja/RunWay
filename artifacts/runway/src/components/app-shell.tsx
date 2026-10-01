@@ -58,7 +58,7 @@ export function ChainNotice() {
       <div className="notice-copy">
         {data ? (
           <>
-            <strong>Live Base Sepolia state.</strong> Every figure on this page is a
+            <strong>Live Arc testnet state.</strong> Every figure on this page is a
             direct contract read served by <code>/api/status</code> at block{' '}
             {data.block.toLocaleString()}.
           </>
@@ -69,7 +69,7 @@ export function ChainNotice() {
         ) : (
           <>
             <strong>Reading chain state.</strong> Loading vault, splitter and
-            advance data from Base Sepolia.
+            advance data from Arc testnet.
           </>
         )}
       </div>
@@ -120,7 +120,7 @@ export function PageFooter() {
   return (
     <footer className="footer-line">
       <span>
-        <strong>RUNWAY</strong> / Base Sepolia operations desk
+        <strong>RUNWAY</strong> / Arc testnet operations desk
       </span>
       <span>Live chain reads via /api/status</span>
     </footer>

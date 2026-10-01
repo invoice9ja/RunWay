@@ -16,7 +16,7 @@ import {
 
 const RESOURCE_NAME = 'runway-x402-inference';
 const RESOURCE_DESCRIPTION =
-  'One hosted inference call, paid in USDC on Base Sepolia. Receipt is routed through the agent RevenueSplitter.';
+  'One hosted inference call, paid in USDC on Arc testnet. Receipt is routed through the agent RevenueSplitter.';
 
 /**
  * x402 `exact`-scheme seller.

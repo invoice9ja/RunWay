@@ -106,7 +106,7 @@ export function Sidebar({
       <div className="nav-label">Network</div>
       <div className="chain-card" data-testid="status-network">
         <div className="chain-card-title">
-          <span className="chain-dot" aria-hidden />Base Sepolia
+          <span className="chain-dot" aria-hidden />Arc testnet
         </div>
         <p className="chain-caption">
           {data ? (
@@ -144,7 +144,7 @@ export function Sidebar({
           {brand}
           <span className="testnet-pill mobile-pill">
             <span className="tiny-dot" aria-hidden />
-            Base Sepolia
+            Arc testnet
           </span>
         </header>
 
