@@ -1176,3 +1176,24 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
   .x402-step-detail { width: 100%; }
   .step-link { margin-left: 0; }
 }
+
+
+/* ---------------------------------------------------------------------------
+   Timestamps.
+
+   Fixed-width so the column of times aligns, and tabular figures so the digits
+   do not jitter. The full date lives in the tooltip so the cell stays narrow
+   enough not to squeeze the detail column.
+   --------------------------------------------------------------------------- */
+.when {
+  font: 500 11px/1.4 var(--app-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  /* Below the tablet breakpoint the table scrolls; the date is worth keeping
+     in view, so it is not hidden along with the address columns. */
+  .data-table .when { position: sticky; right: 0; background: hsl(var(--card)); }
+}

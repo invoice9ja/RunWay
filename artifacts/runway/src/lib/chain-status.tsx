@@ -66,6 +66,8 @@ export type ChainStatus = {
     transaction: string;
     explorer: string;
     block: number;
+    /** ISO 8601 from the block timestamp. Null when the node could not serve it. */
+    timestamp: string | null;
     loanId: string;
     amount: Amount;
   }>;
@@ -73,6 +75,8 @@ export type ChainStatus = {
     transaction: string;
     explorer: string;
     block: number;
+    /** ISO 8601 from the block timestamp. Null when the node could not serve it. */
+    timestamp: string | null;
     revenue: Amount;
     lenderShare: Amount;
     agentShare: Amount;
@@ -81,6 +85,8 @@ export type ChainStatus = {
     transaction: string;
     explorer: string;
     block: number;
+    /** ISO 8601 from the block timestamp. Null when the node could not serve it. */
+    timestamp: string | null;
     from: string;
     amount: Amount;
   }>;
@@ -88,6 +94,8 @@ export type ChainStatus = {
     transaction: string;
     explorer: string;
     block: number;
+    /** ISO 8601 from the block timestamp. Null when the node could not serve it. */
+    timestamp: string | null;
     loanId: string;
     principal: Amount;
     feeBps: number;

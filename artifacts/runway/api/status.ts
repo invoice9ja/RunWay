@@ -8,6 +8,7 @@ import {
   newFetchStats,
   topicsByName,
 } from './_lib/events.js';
+import { blockTimes, isoTime } from './_lib/blocktime.js';
 import type { Handler } from './_lib/http.js';
 
 /**
@@ -174,10 +175,27 @@ const handler: Handler = async (_req, res) => {
       (row) => row.topic0 === transferTopic && String(row.args.to).toLowerCase() === config.splitter.toLowerCase(),
     );
 
+    /**
+     * Block timestamps, resolved once for every event row.
+     *
+     * Arc testnet blocks about every 510s, so the block number on its own says
+     * nothing about when a transaction happened. Collected together and cached by
+     * block, since a block's timestamp never changes.
+     */
+    const allBlocks = [
+      ...repaidRows,
+      ...settledRows,
+      ...loanRows,
+      ...receiptRows,
+    ].map((row) => row.block);
+    const times = await blockTimes(client, allBlocks);
+    const timeOf = (block: number) => isoTime(times.get(block));
+
     const repayments = repaidRows.slice(0, 25).map((row) => ({
       transaction: row.transaction,
       explorer: row.explorer,
       block: row.block,
+      timestamp: timeOf(row.block),
       loanId: bigintArg(row, 'loanId').toString(),
       amount: usdcAmount(bigintArg(row, 'amount')),
     }));
@@ -186,6 +204,7 @@ const handler: Handler = async (_req, res) => {
       transaction: row.transaction,
       explorer: row.explorer,
       block: row.block,
+      timestamp: timeOf(row.block),
       revenue: usdcAmount(bigintArg(row, 'revenue')),
       lenderShare: usdcAmount(bigintArg(row, 'lenderShare')),
       agentShare: usdcAmount(bigintArg(row, 'agentShare')),
@@ -195,6 +214,7 @@ const handler: Handler = async (_req, res) => {
       transaction: row.transaction,
       explorer: row.explorer,
       block: row.block,
+      timestamp: timeOf(row.block),
       from: addressArg(row, 'from'),
       amount: usdcAmount(bigintArg(row, 'value')),
     }));
@@ -203,6 +223,7 @@ const handler: Handler = async (_req, res) => {
       transaction: row.transaction,
       explorer: row.explorer,
       block: row.block,
+      timestamp: timeOf(row.block),
       loanId: bigintArg(row, 'loanId').toString(),
       principal: usdcAmount(bigintArg(row, 'principal')),
       feeBps: Number(bigintArg(row, 'feeBps')),
@@ -249,6 +270,7 @@ const handler: Handler = async (_req, res) => {
       settlements,
       receipts,
       loansOpened,
+      timestampedBlocks: times.size,
       rpc: config.rpcUrl,
       indexer: {
         fromBlock: Number(fromBlock),

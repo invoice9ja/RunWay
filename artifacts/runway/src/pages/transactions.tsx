@@ -4,11 +4,38 @@ import { EmptyState, PageFooter, PageHeader } from '@/components/app-shell';
 import { Section } from '@/components/section';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
 
+const DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'UTC',
+});
+
+/** "14:32" for today, "12 Oct 14:32" otherwise, always UTC. */
+function formatStamp(iso: string | null): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  const sameDay = date.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+  return DATE_FORMAT.format(date);
+}
+
+function fullStamp(iso: string | null, block: number): string {
+  if (!iso) return 'timestamp unavailable';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'timestamp unavailable';
+  return `${date.toUTCString().replace('GMT', 'UTC')} · block ${block.toLocaleString()}`;
+}
+
 type ActivityRow = {
   key: string;
   hash: string;
   explorer: string;
   block: number;
+  /** ISO 8601 from the block's own timestamp. Null when the read failed. */
+  timestamp: string | null;
   kind: 'Receipt' | 'Settlement' | 'Advance' | 'Repayment';
   detail: string;
   counterparty: string;
@@ -24,6 +51,7 @@ export function TransactionsPage() {
           hash: row.transaction,
           explorer: row.explorer,
           block: row.block,
+          timestamp: row.timestamp ?? null,
           kind: 'Receipt' as const,
           detail: `x402 receipt of ${row.amount.formatted} USDC`,
           counterparty: shortAddress(row.from),
@@ -33,6 +61,7 @@ export function TransactionsPage() {
           hash: row.transaction,
           explorer: row.explorer,
           block: row.block,
+          timestamp: row.timestamp ?? null,
           kind: 'Settlement' as const,
           detail: `split ${row.revenue.formatted} USDC into ${row.lenderShare.formatted} lender / ${row.agentShare.formatted} agent`,
           counterparty: 'RevenueSplitter',
@@ -42,6 +71,7 @@ export function TransactionsPage() {
           hash: row.transaction,
           explorer: row.explorer,
           block: row.block,
+          timestamp: row.timestamp ?? null,
           kind: 'Advance' as const,
           detail: `issued ${row.principal.formatted} USDC`,
           counterparty: `Loan #${row.loanId}`,
@@ -51,6 +81,7 @@ export function TransactionsPage() {
           hash: row.transaction,
           explorer: row.explorer,
           block: row.block,
+          timestamp: row.timestamp ?? null,
           kind: 'Repayment' as const,
           detail: `repaid ${row.amount.formatted} USDC to vault`,
           counterparty: `Loan #${row.loanId}`,
@@ -86,6 +117,7 @@ export function TransactionsPage() {
                   <th scope="col">Kind</th>
                   <th scope="col">Detail</th>
                   <th scope="col">Counterparty</th>
+                  <th scope="col">When (UTC)</th>
                   <th scope="col">Transaction</th>
                   <th scope="col">Block</th>
                   <th scope="col">Explorer</th>
@@ -101,6 +133,9 @@ export function TransactionsPage() {
                     </td>
                     <td>{row.detail}</td>
                     <td className="mono">{row.counterparty}</td>
+                    <td className="when" title={fullStamp(row.timestamp, row.block)}>
+                      {formatStamp(row.timestamp)}
+                    </td>
                     <td className="mono" title={row.hash}>
                       {shortAddress(row.hash)}
                     </td>
