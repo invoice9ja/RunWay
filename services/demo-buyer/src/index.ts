@@ -28,7 +28,13 @@ async function main() {
   if (!fs.existsSync(addressesFile)) {
     throw new Error(`No deployment file found: ${addressesFile}`);
   }
-  const { factory: factoryAddress, usdc: usdcAddress } = JSON.parse(fs.readFileSync(addressesFile, "utf8"));
+  const deployment = JSON.parse(fs.readFileSync(addressesFile, "utf8"));
+  // The mainnet deployment file is a placeholder with deployed:false. Refuse to
+  // act on it rather than sending a transaction to an undefined address.
+  if (deployment.deployed === false) {
+    throw new Error(`${addressesFile} reports deployed:false. Nothing exists on ${network} yet.`);
+  }
+  const { factory: factoryAddress, usdc: usdcAddress } = deployment;
 
   const factory = await import("../contracts/typechain").then(m => m.RunwayFactory__factory.connect(factoryAddress, provider));
   const splitters = await factory.getAllSplitters();

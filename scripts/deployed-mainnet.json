@@ -1,12 +1,13 @@
 {
-  "network": "mainnet",
-  "vault": "0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be",
-  "splitterImpl": "0xc880AF5d5aC3ea27c26C47D132661A710C245ea5",
-  "factory": "0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F",
-  "usdc": "0x3600000000000000000000000000000000000000",
-  "admin": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
-  "underwriter": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
-  "watcher": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
-  "timestamp": "2026-09-30T14:30:00.000Z",
-  "status": "contracts_deployed_vault_unfunded"
+  "network": "arc-mainnet",
+  "chainId": 5042,
+  "status": "not_deployed",
+  "deployed": false,
+  "explorer": "https://explorer.arc.io",
+  "notes": [
+    "NOTHING IS DEPLOYED ON ARC MAINNET.",
+    "This file is a placeholder kept so scripts fail loudly rather than pointing at testnet addresses.",
+    "Verified: the testnet vault address returns no bytecode on chain 5042.",
+    "Blocked on funding. The deployer held 0 native and 0 USDC on mainnet at the time of writing."
+  ]
 }

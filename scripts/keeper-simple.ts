@@ -20,18 +20,37 @@ async function main() {
   let chainId: number;
   let deployedFile: string;
   
+  // Defaults pointed at Base Sepolia, so a missing Arc env var silently read the
+  // wrong chain rather than failing.
   if (network === "mainnet") {
-    rpcUrl = process.env.ARC_MAINNET_RPC || process.env.RUNWAY_RPC_URL || "https://sepolia.base.org";
+    rpcUrl = process.env.ARC_MAINNET_RPC || process.env.RUNWAY_RPC_URL;
     chainId = 5042;
     deployedFile = "deployed-mainnet.json";
   } else {
-    rpcUrl = process.env.ARC_TESTNET_RPC || "https://sepolia.base.org";
-    chainId = 84532;
-    deployedFile = "deployed-base-sepolia.json";
+    rpcUrl = process.env.ARC_TESTNET_RPC || process.env.RUNWAY_RPC_URL;
+    chainId = 5042002;
+    deployedFile = "deployed-testnet.json";
   }
-  
-  const projectRoot = "/home/moses/Desktop/RunWay";
+
+  if (!rpcUrl) {
+    throw new Error(
+      `No RPC configured for ${network}. Set ARC_${network === "mainnet" ? "MAINNET" : "TESTNET"}_RPC.`,
+    );
+  }
+
+  const projectRoot = process.cwd();
   const deployed = JSON.parse(fs.readFileSync(join(projectRoot, deployedFile), "utf8"));
+
+  // The mainnet file is a placeholder with deployed:false. Fail loudly rather than
+  // sending a transaction to an undefined address.
+  if (deployed.deployed === false) {
+    throw new Error(
+      `${deployedFile} reports deployed:false. Nothing exists on ${network} yet.`,
+    );
+  }
+  if (!deployed.vault || !deployed.splitter) {
+    throw new Error(`${deployedFile} is missing vault or splitter addresses.`);
+  }
   
   const account = privateKeyToAccount(process.env.PRIVATE_KEY!);
   

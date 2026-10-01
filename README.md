@@ -352,6 +352,15 @@ USDC on Arc testnet is `0x3600000000000000000000000000000000000000`.
 > `forge verify-contract --verifier blockscout --verifier-url https://explorer.testnet.arc.io/api`
 > and needs no API key. See `contracts/foundry.toml`.
 
+> **No mainnet deployment exists.** Everything in this document runs on Arc
+> **testnet** (chain 5042002). The contracts have never been deployed to Arc
+> mainnet (chain 5042): the testnet vault address returns no bytecode there, and
+> the deployer held no mainnet funds. `deployed-mainnet.json` is a placeholder
+> with `deployed: false`, and every script refuses to run against it rather than
+> sending a transaction to an undefined address.
+>
+> Mainnet work is blocked on funding, not on code.
+
 #### Loan cycles on Arc testnet
 
 | Loan | Principal | Fee | Total due | Repaid | Outstanding |
@@ -389,9 +398,9 @@ equals debt plus free balance.
 |------|------|
 | **Oct 1** | Recon: Arc docs, USDC on Arc mainnet, repo scaffold |
 | **Oct 2–3** | Contracts & tests (splitter, vault, factory), invariant tests |
-| **Oct 4** | Testnet → mainnet deploy, explorer verification |
+| **Oct 4** | Testnet deploy and explorer verification (mainnet pending funding) |
 | **Oct 5** | Demo seller/buyer with x402 on Arc; keeper |
-| **Oct 6** | Real loan cycle on mainnet (3 advances repaid); status page |
+| **Oct 6** | Loan cycles on testnet (3 advances repaid); status page. Mainnet cycles **not done** |
 | **Oct 7** | README, threat model, submission description; **submit** |
 | **Oct 8–13** | Watcher, underwriter, richer dashboard, second agent |
 
@@ -400,7 +409,7 @@ equals debt plus free balance.
 - [x] ≥ 1 splitter, ≥ 3 loans opened and repaid (testnet; **mainnet still pending**)
 - [x] Test suite passes, including invariant tests
 - [ ] Live URL opens; public repo; public builder profile linked
-- [ ] Mainnet deployment and cycles on mainnet
+- [ ] Fund the deployer on Arc mainnet, then deploy and run cycles there
 
 ### Post-Submission (Same Repo)
 - [x] Watcher service

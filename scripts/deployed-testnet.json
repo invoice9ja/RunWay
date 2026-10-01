@@ -1,0 +1,32 @@
+{
+  "network": "arc-testnet",
+  "chainId": 5042002,
+  "vault": "0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be",
+  "splitterImpl": "0xc880AF5d5aC3ea27c26C47D132661A710C245ea5",
+  "factory": "0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F",
+  "splitter": "0x06cebc9403c00d972e014e452509d04c7c350880",
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "admin": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+  "underwriter": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+  "watcher": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+  "timestamp": "2026-10-01T00:00:00.000Z",
+  "explorer": "https://explorer.testnet.arc.io",
+  "explorerKind": "blockscout",
+  "status": "deployed_and_exercised",
+  "verified": {
+    "vault": true,
+    "factory": true,
+    "splitterImpl": true
+  },
+  "loans": {
+    "count": 3,
+    "allRepaid": true,
+    "lenderShareBps": 3000,
+    "feeBps": 800
+  },
+  "notes": [
+    "Everything here is Arc TESTNET. The contracts do not exist on Arc mainnet.",
+    "The splitter is a minimal proxy clone of splitterImpl, deployed by the factory.",
+    "admin, underwriter and watcher are the same account, which is a testnet shortcut. Real deployments should separate them."
+  ]
+}
