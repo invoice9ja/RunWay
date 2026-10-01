@@ -33,6 +33,22 @@ import {
  * that USDC, and that outlives the single request.
  */
 
+/**
+ * Read a response that may or may not be JSON.
+ *
+ * A serverless crash returns an HTML or plain-text error page, and calling
+ * `.json()` on that throws "Unexpected token 'A'", which hides both the status
+ * and the real cause. Every seller response goes through here.
+ */
+async function readBody(response: Response): Promise<{ status: number; body: Record<string, unknown> | null; text: string }> {
+  const text = await response.text();
+  try {
+    return { status: response.status, body: JSON.parse(text) as Record<string, unknown>, text };
+  } catch {
+    return { status: response.status, body: null, text };
+  }
+}
+
 type Stage = {
   id: string;
   label: string;
@@ -174,13 +190,16 @@ export function PayPage() {
     try {
       mark('challenge', { state: 'active' });
       const challengeResponse = await fetch(SELLER);
+      const challengeRead = await readBody(challengeResponse);
       if (challengeResponse.status !== 402) {
-        throw new Error(`Expected a 402 challenge, got ${challengeResponse.status}`);
+        throw new Error(
+          `Expected a 402 challenge, got ${challengeRead.status}: ${challengeRead.text.slice(0, 200)}`,
+        );
       }
-      const challenge = (await challengeResponse.json()) as {
-        accepts?: { payTo: `0x${string}`; network: string; maxAmountRequired: string }[];
-      };
-      const requirement = challenge.accepts?.[0];
+      const accepts = challengeRead.body?.accepts as
+        | { payTo: `0x${string}`; network: string; maxAmountRequired: string }[]
+        | undefined;
+      const requirement = accepts?.[0];
       if (!requirement) throw new Error('The seller returned no payment requirements');
       mark('challenge', {
         state: 'done',
@@ -197,13 +216,20 @@ export function PayPage() {
       mark('pay', { state: 'active' });
       const header = encodePaymentHeader(requirement.network, signed);
       const paid = await fetch(RESOURCE, { headers: { 'X-PAYMENT': header } });
-      const body = await paid.json();
+      const settled = await readBody(paid);
 
-      if (paid.status !== 200) {
-        throw new Error(body?.error ?? `Payment failed with ${paid.status}`);
+      if (paid.status !== 200 || !settled.body) {
+        // The seller's own error message is the useful part. A non-JSON body
+        // means the function crashed, so say that rather than blaming the payment.
+        throw new Error(
+          (settled.body?.error as string | undefined) ??
+            `Seller returned ${settled.status} without a JSON body: ${settled.text.slice(0, 160)}`,
+        );
       }
+      const body = settled.body;
       setResource(body);
-      const route = body?.transactions?.route?.explorer as string | undefined;
+      const route = (body.transactions as { route?: { explorer?: string } } | undefined)?.route
+        ?.explorer;
       mark('pay', {
         state: 'done',
         detail: `Paid ${formatUsd(BigInt(requirement.maxAmountRequired))} USDC, routed to the agent splitter`,

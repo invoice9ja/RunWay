@@ -4,6 +4,7 @@ import { getAccount, getPublicClient, requireWalletClient } from '../_lib/chain.
 import { config, explorerTx, formatUsdc } from '../_lib/config.js';
 import { erc20Abi } from '../_lib/abi.js';
 import { baseUrl, header, type Handler } from '../_lib/http.js';
+import { splitSignature } from '../_lib/signature.js';
 import {
   buildChallenge,
   decodeHeader,
@@ -166,7 +167,7 @@ const handler: Handler = async (req, res) => {
       validAfter,
       validBefore,
       authorization.nonce,
-      signature,
+      ...splitSignature(signature),
     ],
   });
   const pullReceipt = await client.waitForTransactionReceipt({ hash: pullHash });

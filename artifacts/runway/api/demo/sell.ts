@@ -2,6 +2,7 @@ import { getPublicClient, getAccount, requireWalletClient } from '../_lib/chain.
 import { config, explorerTx, formatUsdc, isAuthorized } from '../_lib/config.js';
 import { erc20Abi, splitterAbi, vaultAbi } from '../_lib/abi.js';
 import { baseUrl, type Handler } from '../_lib/http.js';
+import { splitSignature } from '../_lib/signature.js';
 import {
   decodeHeader,
   encodeHeader,
@@ -217,10 +218,7 @@ const handler: Handler = async (req, res) => {
   }
 
   const wallet = await requireWalletClient();
-  const body = signature.slice(2);
-  const v = parseInt(body.slice(128, 130), 16);
 
-  // ecrecover wants v as 27/28. viem and wallets return 0/1.
   const pullHash = await wallet.writeContract({
     address: config.usdc,
     abi: erc20Abi,
@@ -232,9 +230,7 @@ const handler: Handler = async (req, res) => {
       validAfter,
       validBefore,
       authorization.nonce,
-      v >= 27 ? v : v + 27,
-      `0x${body.slice(0, 64)}`,
-      `0x${body.slice(64, 128)}`,
+      ...splitSignature(signature),
     ],
   } as never);
   const pullReceipt = await client.waitForTransactionReceipt({ hash: pullHash });

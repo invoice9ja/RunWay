@@ -48,7 +48,13 @@ export const erc20Abi = [
       { name: 'validAfter', type: 'uint256' },
       { name: 'validBefore', type: 'uint256' },
       { name: 'nonce', type: 'bytes32' },
-      { name: 'signature', type: 'bytes' },
+      // Arc testnet USDC takes the signature split into v/r/s, not as one bytes
+      // argument. Selector 0xe3ee160e. The 7-arg `bytes` form is the other
+      // common shape (0xcf092995) and encoding against the wrong one fails at
+      // send time with a params/values length mismatch.
+      { name: 'v', type: 'uint8' },
+      { name: 'r', type: 'bytes32' },
+      { name: 's', type: 'bytes32' },
     ],
     outputs: [],
   },

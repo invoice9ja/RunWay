@@ -4,6 +4,7 @@ import {
   custom,
   formatUnits,
   http,
+  keccak256,
   type Address,
   type EIP1193Provider,
   type PublicClient,
@@ -259,19 +260,25 @@ export async function signAuthorization(
 }
 
 /**
- * EIP-3009 nonces must be unique per authorization, and the contract rejects a
- * replay. Deriving one from a counter plus the chain head keeps it unique without
- * needing a random source that a wallet extension might block.
+ * EIP-3009 nonce, hashed so it is always exactly 32 bytes.
+ *
+ * The previous version concatenated 16 bytes of entropy with hex fragments of
+ * the block number and timestamp. That is 25 bytes, and the signer rejected it
+ * with "Expected bytes32, got bytes25". Building the string by hand means the
+ * length depends on the width of whatever is concatenated, so hash it instead:
+ * keccak256 always returns 32 bytes whatever goes in.
+ *
+ * Uniqueness comes from the entropy plus the chain head, which also stops two
+ * signatures in the same millisecond from colliding.
  */
 async function createNonce(wallet: ConnectedWallet): Promise<`0x${string}`> {
   const block = await wallet.publicClient.getBlockNumber();
-  const timestamp = BigInt(Math.floor(Date.now() * 1000));
-  const entropy = new Uint8Array(16);
+  const entropy = new Uint8Array(32);
   crypto.getRandomValues(entropy);
-  const hex = Array.from(entropy, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return `0x${hex}${block.toString(16).padStart(12, '0')}${timestamp
-    .toString(16)
-    .slice(-6)}` as `0x${string}`;
+  const seed = new Uint8Array(entropy.length + 16);
+  seed.set(entropy, 0);
+  seed.set(new Uint8Array(new BigUint64Array([block, BigInt(Date.now())]).buffer), entropy.length);
+  return keccak256(seed);
 }
 
 export function encodePaymentHeader(
