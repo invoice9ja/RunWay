@@ -194,10 +194,42 @@ export function useChainStatus(): ChainState {
   return context;
 }
 
+/** Stages the server reports in order, shown while the run is in flight. */
+const PHASES = [
+  'Requesting the resource',
+  'Receiving the 402 challenge',
+  'Checking USDC allowance',
+  'Signing the EIP-3009 authorization',
+  'Paying and routing the receipt',
+  'Settling the lender share',
+];
+
 export function useDemoPayment() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<DemoResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState(-1);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+
+  /**
+   * The server only answers once the whole flow has finished, which leaves the
+   * button showing "Running…" for as long as the chain takes. Advancing a phase
+   * clock on a timer gives feedback while the request is outstanding. The server
+   * remains the source of truth: once it replies, its own step list replaces this.
+   */
+  useEffect(() => {
+    if (!running) return undefined;
+    setPhase(0);
+    setStartedAt(Date.now());
+    const started = Date.now();
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - started;
+      // Front-load so the first stages move quickly, then stretch out.
+      const index = Math.min(PHASES.length - 1, Math.floor(elapsed / 2600));
+      setPhase((current) => (index > current ? index : current));
+    }, 400);
+    return () => clearInterval(timer);
+  }, [running]);
 
   const run = useCallback(async (amount: string) => {
     setRunning(true);
@@ -217,10 +249,19 @@ export function useDemoPayment() {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setRunning(false);
+      setStartedAt(null);
     }
   }, []);
 
-  return { run, running, result, error };
+  return {
+    run,
+    running,
+    result,
+    error,
+    phase,
+    phases: PHASES,
+    elapsedMs: startedAt === null ? null : Date.now() - startedAt,
+  };
 }
 
 export const shortAddress = (value: string) =>

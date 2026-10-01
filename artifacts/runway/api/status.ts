@@ -4,7 +4,12 @@ import { erc20Abi, factoryAbi, splitterAbi, vaultAbi } from './_lib/abi.js';
 import { addressArg, bigintArg, fetchEvents } from './_lib/events.js';
 import type { Handler } from './_lib/http.js';
 
-const LOOKBACK_BLOCKS = 5_400n;
+/**
+ * The public Arc endpoint rejects `eth_getLogs` over roughly 1,000 blocks, so
+ * the window is kept under that. `fetchEvents` chunks internally, and Arc testnet
+ * blocks every ~510s, so 900 blocks is roughly four days of history.
+ */
+const LOOKBACK_BLOCKS = 900n;
 
 /**
  * Each read costs roughly twenty RPC calls, and the public Base Sepolia endpoint
@@ -113,6 +118,13 @@ const handler: Handler = async (_req, res) => {
       }),
     );
 
+    /**
+     * A short window on purpose. The public Arc endpoint is unreliable over long
+     * ranges: it rejects some, rate-limits others, and answers some from a node
+     * whose index lags the head, returning zero rows for events that exist. That
+     * last case is the dangerous one, because it reads as "no activity" rather
+     * than as an error. Better a short honest window than a wide empty one.
+     */
     const fromBlock = head > LOOKBACK_BLOCKS ? head - LOOKBACK_BLOCKS : 0n;
 
     const [settledRows, repaidRows, loanRows, receiptRows] = await Promise.all([
@@ -233,17 +245,31 @@ const handler: Handler = async (_req, res) => {
       receipts,
       loansOpened,
       rpc: config.rpcUrl,
+      indexer: {
+        fromBlock: Number(fromBlock),
+        toBlock: Number(head),
+        settledEvents: settledRows.length,
+        repaidEvents: repaidRows.length,
+        loanOpenedEvents: loanRows.length,
+        receiptEvents: receiptRows.length,
+        ...fetchEvents.lastRun,
+      },
     };
     cache.set(key, { at: Date.now(), body: payload });
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Runway-Cache', 'miss');
     res.status(200).json(payload);
   } catch (error) {
-    // Serve the last good read rather than breaking the dashboard.
+    // Serve the last good read rather than breaking the dashboard, but say so:
+    // the previous version returned this silently and it read as "no activity".
     if (cached && age < STALE_TTL_MS) {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('X-Runway-Cache', 'stale');
-      res.status(200).json({ ...cached.body, degraded: true });
+      res.status(200).json({
+        ...cached.body,
+        degraded: true,
+        degradedReason: error instanceof Error ? error.message : String(error),
+      });
       return;
     }
     res.status(502).json({

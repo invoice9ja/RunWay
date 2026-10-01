@@ -58,6 +58,28 @@ export function X402Page() {
             </p>
           )}
 
+          {demo.running && (
+            <ol className="x402-steps" data-testid="x402-progress">
+              {demo.phases.map((name, index) => {
+                const state =
+                  index < demo.phase ? 'done' : index === demo.phase ? 'active' : 'pending';
+                return (
+                  <li className={`x402-step progress-${state}`} key={name}>
+                    <span className={`x402-dot${state === 'done' ? '' : state === 'active' ? ' active' : ' pending'}`} aria-hidden />
+                    <span className="x402-step-name">{name}</span>
+                    <span className="x402-step-detail">
+                      {state === 'done'
+                        ? 'done'
+                        : state === 'active'
+                          ? 'working…'
+                          : ''}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+
           {demo.result && (
             <ul className="x402-steps" data-testid="x402-steps">
               {demo.result.steps.map((step, index) => (

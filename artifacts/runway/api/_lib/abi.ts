@@ -99,6 +99,7 @@ export const splitterAbi = [
       { name: 'revenue', type: 'uint256', indexed: true },
       { name: 'lenderShare', type: 'uint256', indexed: true },
       { name: 'agentShare', type: 'uint256', indexed: true },
+      { name: 'advanceRepaid', type: 'uint256', indexed: false },
     ],
   },
   {
@@ -181,6 +182,8 @@ export const vaultAbi = [
       { name: 'loanId', type: 'uint256', indexed: true },
       { name: 'splitter', type: 'address', indexed: true },
       { name: 'principal', type: 'uint256', indexed: false },
+      { name: 'fee', type: 'uint256', indexed: false },
+      { name: 'totalDue', type: 'uint256', indexed: false },
       { name: 'feeBps', type: 'uint256', indexed: false },
       { name: 'shareBps', type: 'uint256', indexed: false },
       { name: 'dueDate', type: 'uint256', indexed: false },
@@ -193,6 +196,7 @@ export const vaultAbi = [
     inputs: [
       { name: 'loanId', type: 'uint256', indexed: true },
       { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'outstanding', type: 'uint256', indexed: false },
     ],
   },
   {
