@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
-import {RunwayVault} from "../src/RunwayVault.sol";
+import { Script, console } from "forge-std/Script.sol";
+import { RunwayVault } from "../src/RunwayVault.sol";
 
 contract Deposit is Script {
     function run() external {

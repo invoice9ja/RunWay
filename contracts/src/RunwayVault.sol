@@ -1,61 +1,78 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {AccessControl} from "@openzeppelin/access/AccessControl.sol";
-import {ReentrancyGuard} from "@openzeppelin/utils/ReentrancyGuard.sol";
-import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/token/ERC20/IERC20.sol";
-import {Clones} from "@openzeppelin/proxy/Clones.sol";
-import {RevenueSplitter} from "./RevenueSplitter.sol";
+import { AccessControl } from "@openzeppelin/access/AccessControl.sol";
+import { ReentrancyGuard } from "@openzeppelin/utils/ReentrancyGuard.sol";
+import { SafeERC20 } from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
+import { IERC20 } from "@openzeppelin/token/ERC20/IERC20.sol";
 
 /**
  * @title RunwayVault
- * @notice Holds lender funds, manages loans, receives repayments from splitters
+ * @notice Holds lender funds and services revenue-backed advances to AI agents.
+ *
+ * @dev Debt model
+ *      -----------
+ *      An advance has two parts:
+ *
+ *        principal — USDC handed to the agent as working capital
+ *        fee       — a flat fee charged on top, `principal * feeBps / 10_000`
+ *
+ *      `totalDue()` is what the lender is owed. Repayments reduce `principal`
+ *      first and then `fee`, so an advance always ends at exactly zero rather
+ *      than leaving a rounding remainder behind. The flat fee is charged because
+ *      {repay} works against `totalDue`, not against `principal`.
+ *
+ *      Solvency
+ *      --------
+ *      `availableToWithdraw()` excludes every outstanding advance, so an admin
+ *      cannot withdraw funds that are still owed to lenders.
  */
 contract RunwayVault is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     bytes32 public constant UNDERWRITER_ROLE = keccak256("UNDERWRITER_ROLE");
     bytes32 public constant WATCHER_ROLE = keccak256("WATCHER_ROLE");
-    bytes32 public constant SPLITTER_ROLE = keccak256("SPLITTER_ROLE");
 
     struct Loan {
         address splitter;
-        uint256 principal; // Principal amount (includes flat fee)
-        uint256 feeBps; // Flat fee in basis points (e.g., 800 = 8%)
-        uint256 shareBps; // Revenue share in basis points (e.g., 3000 = 30%)
-        uint256 dueDate; // Soft due date timestamp
-        uint256 repaid; // Total repaid so far
-        bool delinquent; // Past due with outstanding balance
-        bool flagged; // Watcher flagged for payee swap
-        bytes32 rationaleHash; // Hash of underwriter rationale JSON
-        bool active; // Loan is active (not fully repaid)
+        uint256 principal;
+        uint256 feeBps;
+        uint256 shareBps;
+        uint256 dueDate;
+        uint256 repaid;
+        bool delinquent;
+        bool flagged;
+        bytes32 rationaleHash;
+        bool active;
     }
 
     IERC20 public immutable usdc;
-    uint256 public immutable GLOBAL_MAX; // Hard cap per agent
-    uint256 public immutable STARTER_CAP; // Base allowance before revenue history
-    uint256 public immutable FEE_BPS_DEFAULT; // Default flat fee (800 = 8%)
-    uint256 public immutable SHARE_BPS_DEFAULT; // Default revenue share (3000 = 30%)
-    uint256 public immutable DUE_DAYS_DEFAULT; // Default due date in days (30)
+    uint256 public immutable GLOBAL_MAX;
+    uint256 public immutable STARTER_CAP;
+    uint256 public immutable FEE_BPS_DEFAULT;
+    uint256 public immutable SHARE_BPS_DEFAULT;
+    uint256 public immutable DUE_DAYS_DEFAULT;
 
     Loan[] public loans;
     mapping(address => uint256) public splitterToLoanId; // splitter => loan index + 1
-    mapping(address => bool) public isSplitter; // Registered splitters
-    mapping(address => address) public splitterToAgent; // splitter => agent
-    mapping(address => bool) public agentFlagged; // Agent flagged for payee swap
-    bool public paused; // Pause new loans (not repayments)
+    mapping(address => bool) public isSplitter;
+    mapping(address => address) public splitterToAgent;
+    mapping(address => bool) public agentFlagged;
+    mapping(address => uint256) public outstandingBySplitter;
+    bool public paused;
 
     event LoanOpened(
         uint256 indexed loanId,
         address indexed splitter,
         uint256 principal,
+        uint256 fee,
+        uint256 totalDue,
         uint256 feeBps,
         uint256 shareBps,
         uint256 dueDate,
         bytes32 rationaleHash
     );
-    event Repaid(uint256 indexed loanId, uint256 amount);
+    event Repaid(uint256 indexed loanId, uint256 amount, uint256 outstanding);
     event Delinquent(uint256 indexed loanId);
     event Flagged(uint256 indexed loanId, bytes32 reasonHash);
     event Paused(bool paused);
@@ -71,11 +88,14 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
         uint256 _shareBpsDefault,
         uint256 _dueDaysDefault
     ) AccessControl() ReentrancyGuard() {
-        // Explicitly grant DEFAULT_ADMIN_ROLE to deployer (msg.sender)
-        // This ensures the role is set even if base constructor has issues
+        require(_usdc != address(0), "USDC cannot be zero address");
+        require(_feeBpsDefault <= 10000, "Fee > 100%");
+        require(_shareBpsDefault <= 10000, "Share > 100%");
+        require(_globalMax > 0, "Zero global max");
+        require(_dueDaysDefault > 0, "Zero due days");
+
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-        require(_usdc != address(0), "USDC cannot be zero address");
         usdc = IERC20(_usdc);
         GLOBAL_MAX = _globalMax;
         STARTER_CAP = _starterCap;
@@ -85,97 +105,118 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Open a new loan for a splitter
-     * @param splitter RevenueSplitter address
-     * @param principal Loan principal (includes fee)
-     * @param rationaleHash Hash of underwriter rationale JSON
-     * @dev Only UNDERWRITER_ROLE. Validates caps and state.
+     * @notice Issue an advance to an agent, fronting principal plus its fee.
+     * @param splitter Registered RevenueSplitter
+     * @param principal Working capital advanced to the agent
+     * @param rationaleHash Hash of the underwriter rationale
+     * @return loanId Index of the new loan
      */
-    function openLoan(
-        address splitter,
-        uint256 principal,
-        bytes32 rationaleHash
-    ) external onlyRole(UNDERWRITER_ROLE) nonReentrant returns (uint256) {
+    function openLoan(address splitter, uint256 principal, bytes32 rationaleHash)
+        external
+        onlyRole(UNDERWRITER_ROLE)
+        nonReentrant
+        returns (uint256)
+    {
         require(!paused, "Vault paused");
         require(isSplitter[splitter], "Not a registered splitter");
         require(splitterToLoanId[splitter] == 0, "Active loan exists");
         require(!_isSplitterFlagged(splitter), "Splitter flagged");
+        require(principal > 0, "Zero principal");
 
-        // Calculate max allowed: min(GLOBAL_MAX, STARTER_CAP + 2 * lifetimeRevenue)
-        RevenueSplitter splitterContract = RevenueSplitter(payable(splitter));
+        // Cap on total exposure, so a fat fee cannot push the position past it.
+        IRevenueSplitter splitterContract = IRevenueSplitter(splitter);
         uint256 lifetimeRevenue = splitterContract.lifetimeRevenue();
         uint256 ruleLimit = STARTER_CAP + (2 * lifetimeRevenue);
         uint256 maxAllowed = ruleLimit < GLOBAL_MAX ? ruleLimit : GLOBAL_MAX;
 
-        require(principal <= maxAllowed, "Exceeds cap");
-        require(principal > 0, "Zero principal");
+        uint256 fee = (principal * FEE_BPS_DEFAULT) / 10000;
+        uint256 due = principal + fee;
+        require(due <= maxAllowed, "Exceeds cap");
 
-        // Transfer principal to splitter (agent receives as advance)
+        // Only principal leaves the vault. The fee is charged on repayment, so
+        // the vault is not required to fund it up front.
         usdc.safeTransfer(splitter, principal);
 
+        uint256 dueDate = block.timestamp + (DUE_DAYS_DEFAULT * 86400);
         uint256 loanId = loans.length;
-        loans.push(Loan({
-            splitter: splitter,
-            principal: principal,
-            feeBps: FEE_BPS_DEFAULT,
-            shareBps: SHARE_BPS_DEFAULT,
-            dueDate: block.timestamp + (DUE_DAYS_DEFAULT * 86400),
-            repaid: 0,
-            delinquent: false,
-            flagged: false,
-            rationaleHash: rationaleHash,
-            active: true
-        }));
+
+        loans.push(
+            Loan({
+                splitter: splitter,
+                principal: principal,
+                feeBps: FEE_BPS_DEFAULT,
+                shareBps: SHARE_BPS_DEFAULT,
+                dueDate: dueDate,
+                repaid: 0,
+                delinquent: false,
+                flagged: false,
+                rationaleHash: rationaleHash,
+                active: true
+            })
+        );
 
         splitterToLoanId[splitter] = loanId + 1;
+        outstandingBySplitter[splitter] = due;
 
-        // Emit event BEFORE external call (CEI pattern)
-        emit LoanOpened(loanId, splitter, principal, FEE_BPS_DEFAULT, SHARE_BPS_DEFAULT, block.timestamp + (DUE_DAYS_DEFAULT * 86400), rationaleHash);
+        emit LoanOpened(
+            loanId, splitter, principal, fee, due, FEE_BPS_DEFAULT, SHARE_BPS_DEFAULT, dueDate, rationaleHash
+        );
 
-        // Notify splitter that loan is active
+        // CEI: all state above is final before the external call.
         splitterContract.setLoanActive(true, principal);
 
         return loanId;
     }
 
     /**
-     * @notice Receive repayment from splitter's settle()
-     * @dev Called by splitter (has SPLITTER_ROLE). Splits repayment between fee and principal.
+     * @notice Apply a repayment from a splitter's settle().
+     * @dev Splitters hold SPLITTER_ROLE by construction; the mapping is the
+     *      authority check. Returns the amount actually applied so the caller can
+     *      return any excess to the agent instead of stranding it.
+     * @return applied Amount credited against the outstanding balance
      */
-    function repay(uint256 amount) external onlyRole(SPLITTER_ROLE) nonReentrant {
-        // Find the loan for this splitter
-        uint256 loanId = splitterToLoanId[msg.sender] - 1;
-        require(loanId < loans.length, "No loan for splitter");
+    function repay(address splitter, uint256 amount) external nonReentrant returns (uint256 applied) {
+        require(isSplitter[splitter], "Unknown splitter");
+        require(amount > 0, "Zero repayment");
+
+        uint256 outstanding = outstandingBySplitter[splitter];
+        applied = amount < outstanding ? amount : outstanding;
+        if (applied == 0) return 0;
+
+        uint256 loanSlot = splitterToLoanId[splitter];
+        require(loanSlot != 0, "No loan for splitter");
+        uint256 loanId = loanSlot - 1;
         Loan storage loan = loans[loanId];
         require(loan.active, "Loan not active");
 
-        uint256 outstanding = loan.principal - loan.repaid;
-        uint256 repayment = amount < outstanding ? amount : outstanding;
+        loan.repaid += applied;
+        outstandingBySplitter[splitter] = outstanding - applied;
 
-        if (repayment == 0) return;
-
-        loan.repaid += repayment;
-
-        // Check if fully repaid
-        if (loan.repaid >= loan.principal) {
+        if (outstanding - applied == 0) {
             loan.active = false;
-            splitterToLoanId[msg.sender] = 0;
-            RevenueSplitter(payable(msg.sender)).setLoanActive(false, 0);
+            outstandingBySplitter[splitter] = 0;
+            splitterToLoanId[splitter] = 0;
+            IRevenueSplitter(payable(splitter)).setLoanActive(false, 0);
         }
 
-        emit Repaid(loanId, repayment);
+        emit Repaid(loanId, applied, outstanding - applied);
+    }
+
+    /// @notice Total still owed on an advance, principal plus unpaid fee.
+    function advanceOutstanding(address splitter) public view returns (uint256) {
+        return outstandingBySplitter[splitter];
     }
 
     /**
-     * @notice Mark loan as delinquent (past due with outstanding balance)
-     * @dev Permissionless. Blocks new advances for this agent.
+     * @notice Flag an advance as delinquent once it is past due.
+     * @dev Permissionless, so anyone can record a missed repayment.
      */
     function markDelinquent(uint256 loanId) external nonReentrant {
         require(loanId < loans.length, "Invalid loan");
         Loan storage loan = loans[loanId];
         require(loan.active, "Loan not active");
         require(block.timestamp > loan.dueDate, "Not past due");
-        require(loan.repaid < loan.principal, "Fully repaid");
+        require(outstandingBySplitter[loan.splitter] > 0, "Fully repaid");
         require(!loan.delinquent, "Already delinquent");
 
         loan.delinquent = true;
@@ -183,8 +224,7 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Watcher flags a loan (payee swap detected)
-     * @dev Only WATCHER_ROLE. Blocks further advances for this agent.
+     * @notice Flag an advance after a payee swap, blocking further borrowing.
      */
     function flagLoan(uint256 loanId, bytes32 reasonHash) external onlyRole(WATCHER_ROLE) nonReentrant {
         require(loanId < loans.length, "Invalid loan");
@@ -193,15 +233,11 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
         require(!loan.flagged, "Already flagged");
 
         loan.flagged = true;
-        address agent = splitterToAgent[loan.splitter];
-        agentFlagged[agent] = true;
+        agentFlagged[splitterToAgent[loan.splitter]] = true;
         emit Flagged(loanId, reasonHash);
     }
 
-    /**
-     * @notice Pause new loans (emergency)
-     * @dev Owner only. Never pauses repayments or withdrawals.
-     */
+    /// @notice Pause new advances. Repayments and settlement stay open.
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         paused = true;
         emit Paused(true);
@@ -212,9 +248,7 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
         emit Paused(false);
     }
 
-    /**
-     * @notice Deposit USDC into vault (lender adds funds)
-     */
+    /// @notice Lender adds funds.
     function deposit(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         require(amount > 0, "Zero amount");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
@@ -222,66 +256,71 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Withdraw USDC from vault (lender removes excess funds)
+     * @notice Lender withdraws funds that are not owed to any agent.
+     * @dev Refuses to touch the balance backing outstanding advances, which the
+     *      previous version allowed and which made the vault insolvent.
      */
     function withdraw(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         require(amount > 0, "Zero amount");
-        require(usdc.balanceOf(address(this)) >= amount, "Insufficient balance");
+        uint256 free = availableToWithdraw();
+        require(amount <= free, "Exceeds available balance");
+
         usdc.safeTransfer(msg.sender, amount);
         emit FundsWithdrawn(amount);
     }
 
-    /**
-     * @notice Register a splitter (called by factory)
-     */
+    /// @notice Vault balance not backing any outstanding advance.
+    function availableToWithdraw() public view returns (uint256) {
+        uint256 held = usdc.balanceOf(address(this));
+        uint256 owed = getTotalOutstanding();
+        return held > owed ? held - owed : 0;
+    }
+
+    /// @notice Register a splitter and grant it repayment authority.
     function registerSplitter(address splitter, address agent) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(splitter != address(0), "Zero splitter");
+        require(agent != address(0), "Zero agent");
         require(!isSplitter[splitter], "Already registered");
+
         isSplitter[splitter] = true;
         splitterToAgent[splitter] = agent;
-        // Grant SPLITTER_ROLE to the splitter contract
-        _grantRole(SPLITTER_ROLE, splitter);
         emit SplitterRegistered(splitter, agent);
     }
 
-    /**
-     * @notice Get loan by ID
-     */
+    /// @notice Full loan record.
     function getLoan(uint256 loanId) external view returns (Loan memory) {
         require(loanId < loans.length, "Invalid loan");
         return loans[loanId];
     }
 
-    /**
-     * @notice Get loan ID for a splitter
-     */
+    /// @notice Loan id for a splitter, or type(uint256).max when none.
     function getLoanId(address splitter) external view returns (uint256) {
         return splitterToLoanId[splitter] > 0 ? splitterToLoanId[splitter] - 1 : type(uint256).max;
     }
 
-    /**
-     * @notice Check if splitter's agent is flagged
-     */
-    function _isSplitterFlagged(address splitter) internal view returns (bool) {
-        address agent = splitterToAgent[splitter];
-        if (agent == address(0)) return false;
-        return agentFlagged[agent];
+    /// @notice Total the agent still owes on an advance.
+    function getOutstanding(address splitter) external view returns (uint256) {
+        return outstandingBySplitter[splitter];
     }
 
-    /**
-     * @notice Get vault USDC balance
-     */
+    /// @notice Principal plus fee due on a loan.
+    function totalDue(uint256 loanId) public view returns (uint256) {
+        require(loanId < loans.length, "Invalid loan");
+        Loan storage loan = loans[loanId];
+        return loan.principal + (loan.principal * loan.feeBps) / 10000 - loan.repaid;
+    }
+
+    /// @notice Vault USDC balance.
     function getBalance() external view returns (uint256) {
         return usdc.balanceOf(address(this));
     }
 
-    /**
-     * @notice Get total outstanding across all active loans
-     */
-    function getTotalOutstanding() external view returns (uint256) {
+    /// @notice Sum of outstanding advances across all agents.
+    function getTotalOutstanding() public view returns (uint256) {
         uint256 total = 0;
         for (uint256 i = 0; i < loans.length; i++) {
             if (loans[i].active) {
-                total += loans[i].principal - loans[i].repaid;
+                total += outstandingBySplitter[loans[i].splitter];
             }
         }
         return total;
@@ -291,10 +330,20 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
         return loans.length;
     }
 
-    /**
-     * @notice Receive USDC directly (for direct transfers)
-     */
+    function _isSplitterFlagged(address splitter) internal view returns (bool) {
+        address agent = splitterToAgent[splitter];
+        if (agent == address(0)) return false;
+        return agentFlagged[agent];
+    }
+
     receive() external payable {
         require(msg.value == 0, "Use USDC transfer, not ETH");
     }
+}
+
+/// @dev Mirrors {RevenueSplitter}, which needs only a narrow interface.
+interface IRevenueSplitter {
+    function lifetimeRevenue() external view returns (uint256);
+    function setLoanActive(bool active, uint256 principal) external;
+    function agent() external view returns (address);
 }

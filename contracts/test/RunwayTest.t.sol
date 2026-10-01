@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Test, console} from "forge-std/Test.sol";
-import {RunwayVault} from "../src/RunwayVault.sol";
-import {RunwayFactory} from "../src/RunwayFactory.sol";
-import {RevenueSplitter} from "../src/RevenueSplitter.sol";
-import {IERC20} from "@openzeppelin/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
-import {ERC20} from "@openzeppelin/token/ERC20/ERC20.sol";
+import { Test, console } from "forge-std/Test.sol";
+import { RunwayVault } from "../src/RunwayVault.sol";
+import { RunwayFactory } from "../src/RunwayFactory.sol";
+import { RevenueSplitter } from "../src/RevenueSplitter.sol";
+import { IERC20 } from "@openzeppelin/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
+import { ERC20 } from "@openzeppelin/token/ERC20/ERC20.sol";
 
 contract MockERC20 is ERC20 {
     constructor() ERC20("Mock USDC", "mUSDC") {
@@ -22,7 +22,6 @@ contract MockERC20 is ERC20 {
 contract RunwayTest is Test {
     using SafeERC20 for IERC20;
 
-    // Addresses
     address admin = address(0x1);
     address underwriter = address(0x2);
     address watcher = address(0x3);
@@ -32,14 +31,10 @@ contract RunwayTest is Test {
     address buyer2 = address(0x101);
     address lender = address(0x1000);
 
-    // Contracts
     RunwayVault vault;
     RunwayFactory factory;
     RevenueSplitter splitter1;
-    RevenueSplitter splitter2;
 
-    // Constants
-    uint256 constant USDC_DECIMALS = 6;
     uint256 constant GLOBAL_MAX = 10_000 * 1e6;
     uint256 constant STARTER_CAP = 500 * 1e6;
     uint256 constant FEE_BPS = 800;
@@ -47,9 +42,7 @@ contract RunwayTest is Test {
     uint256 constant DUE_DAYS = 30;
     uint256 constant DEFAULT_SHARE_BPS = 3000;
 
-    // Mock USDC
     MockERC20 usdc;
-    uint256 usdcBalance = 1_000_000 * 1e6; // 1M USDC for testing
 
     function setUp() public {
         vm.label(admin, "admin");
@@ -61,94 +54,105 @@ contract RunwayTest is Test {
         vm.label(buyer2, "buyer2");
         vm.label(lender, "lender");
 
-        // Deploy mock USDC
         usdc = new MockERC20();
 
-        // Deploy vault
-        vault = new RunwayVault(
-            address(usdc),
-            GLOBAL_MAX,
-            STARTER_CAP,
-            FEE_BPS,
-            SHARE_BPS,
-            DUE_DAYS
-        );
-
-        // Grant admin DEFAULT_ADMIN_ROLE on vault (test contract is deployer)
+        vault = new RunwayVault(address(usdc), GLOBAL_MAX, STARTER_CAP, FEE_BPS, SHARE_BPS, DUE_DAYS);
         vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), admin);
 
-        // Deploy splitter implementation
-        RevenueSplitter splitterImpl = new RevenueSplitter(
-            address(vault),
-            address(0),
-            address(0),
-            address(usdc),
-            DEFAULT_SHARE_BPS
-        );
+        // Implementation is left uninitialised; clones do the real setup.
+        RevenueSplitter splitterImpl = new RevenueSplitter();
 
-        // Deploy factory
-        factory = new RunwayFactory(
-            address(vault),
-            address(splitterImpl),
-            address(usdc),
-            DEFAULT_SHARE_BPS
-        );
+        factory = new RunwayFactory();
+        factory.initialize(address(vault), address(splitterImpl), address(usdc), DEFAULT_SHARE_BPS);
 
-        // Grant roles (now as admin)
         vm.startPrank(admin);
         vault.grantRole(vault.UNDERWRITER_ROLE(), underwriter);
         vault.grantRole(vault.WATCHER_ROLE(), watcher);
         vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), address(factory));
         vm.stopPrank();
 
-        // Grant admin DEFAULT_ADMIN_ROLE on factory (test contract is deployer)
         factory.grantRole(factory.DEFAULT_ADMIN_ROLE(), admin);
 
-        // Fund lender and vault (deposit as admin)
         usdc.mint(lender, 1_000_000 * 1e6);
         usdc.mint(admin, 100_000 * 1e6);
         vm.startPrank(admin);
         usdc.approve(address(vault), type(uint256).max);
-        vault.deposit(50_000 * 1e6); // 50k USDC in vault
+        vault.deposit(50_000 * 1e6);
         vm.stopPrank();
 
-        // Fund buyers
         usdc.mint(buyer1, 10_000 * 1e6);
         usdc.mint(buyer2, 10_000 * 1e6);
-
-        // Fund agents (for gas)
         usdc.mint(agent1, 1000 * 1e6);
         usdc.mint(agent2, 1000 * 1e6);
     }
 
+    function _newSplitter(address agent) internal returns (RevenueSplitter) {
+        vm.prank(admin);
+        address addr = factory.createSplitter(agent, agent);
+        return RevenueSplitter(payable(addr));
+    }
+
+    function _pay(RevenueSplitter splitter, uint256 amount) internal {
+        vm.prank(buyer1);
+        IERC20(usdc).safeTransfer(address(splitter), amount);
+    }
+
+    function _openLoan(RevenueSplitter splitter, uint256 principal) internal returns (uint256) {
+        vm.prank(underwriter);
+        return vault.openLoan(address(splitter), principal, keccak256("test rationale"));
+    }
+
+    // -----------------------------------------------------------------------
+    // deployment
+    // -----------------------------------------------------------------------
+
     function test_DeployAndCreateSplitter() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
+        splitter1 = _newSplitter(agent1);
 
         assertEq(factory.getVault(), address(vault));
-        assertTrue(vault.isSplitter(splitterAddr));
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+        assertTrue(vault.isSplitter(address(splitter1)));
         assertEq(splitter1.agent(), agent1);
         assertEq(splitter1.vault(), address(vault));
         assertEq(splitter1.shareBps(), DEFAULT_SHARE_BPS);
+        assertEq(splitter1.usdc(), address(usdc));
     }
 
-function test_OpenLoan() public {
-        // Create splitter
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+    function test_FactoryDeploysMinimalClones() public {
+        splitter1 = _newSplitter(agent1);
+        address clone = address(splitter1);
+        address impl = factory.splitterImplementation();
 
-        // Open loan via underwriter (400 USDC - under STARTER_CAP of 500)
-        vm.startPrank(underwriter);
-        uint256 loanId = vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test rationale"));
-        vm.stopPrank();
+        // A clone's runtime code is the proxy, so it must differ from the impl.
+        assertTrue(clone != impl, "clone must not be the implementation");
+        assertEq(clone.code.length, 45, "minimal clone runtime is 45 bytes");
+
+        // Two agents get independent storage.
+        RevenueSplitter second = _newSplitter(agent2);
+        assertTrue(address(second) != clone);
+        assertEq(second.agent(), agent2);
+        assertEq(splitter1.agent(), agent1);
+
+        // Implementation itself is never initialised as a live splitter.
+        assertEq(impl.code.length > 1000, true);
+    }
+
+    function test_CloneCannotBeReinitialised() public {
+        splitter1 = _newSplitter(agent1);
+        vm.expectRevert("Already initialized");
+        splitter1.initialize(address(vault), agent2, agent2, address(usdc), SHARE_BPS);
+    }
+
+    // -----------------------------------------------------------------------
+    // loan issuance
+    // -----------------------------------------------------------------------
+
+    function test_OpenLoan() public {
+        splitter1 = _newSplitter(agent1);
+        uint256 loanId = _openLoan(splitter1, 400 * 1e6);
 
         assertEq(loanId, 0);
         RunwayVault.Loan memory loan = vault.getLoan(0);
-        assertEq(loan.splitter, splitterAddr);
+        assertEq(loan.splitter, address(splitter1));
         assertEq(loan.principal, 400 * 1e6);
         assertEq(loan.feeBps, FEE_BPS);
         assertEq(loan.shareBps, SHARE_BPS);
@@ -156,249 +160,405 @@ function test_OpenLoan() public {
         assertFalse(loan.delinquent);
         assertFalse(loan.flagged);
 
-        // Agent can withdraw the loan principal from splitter
-        vm.startPrank(agent1);
-        splitter1.withdraw();
-        vm.stopPrank();
-
-        // Agent received advance (initial mint was 1000 USDC + 400 USDC loan = 1400 USDC)
-        assertEq(IERC20(usdc).balanceOf(agent1), 1400 * 1e6);
+        // Working capital is tracked separately from earned revenue, and the
+        // vault records debt as principal plus the 8% fee.
+        assertEq(splitter1.advanceHeld(), 400 * 1e6);
+        assertEq(splitter1.agentClaimable(), 0);
+        assertEq(splitter1.getDebtOwed(), 432 * 1e6);
     }
 
     function test_LoanCapEnforcement() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
-
-        // Try to open loan exceeding GLOBAL_MAX
-        vm.startPrank(underwriter);
+        splitter1 = _newSplitter(agent1);
+        vm.prank(underwriter);
         vm.expectRevert("Exceeds cap");
-        vault.openLoan(splitterAddr, GLOBAL_MAX + 1, keccak256("test"));
-        vm.stopPrank();
+        vault.openLoan(address(splitter1), GLOBAL_MAX + 1, keccak256("test"));
     }
 
-    function test_SettleAndRepay() public {
-        // Setup: create splitter, open loan
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+    function test_FeeCountsAgainstTheCap() public {
+        splitter1 = _newSplitter(agent1);
+        // Cap is STARTER_CAP = 500 total exposure including the fee.
+        // 495 principal + 39.6 fee = 534.6 > 500, so this must fail.
+        vm.prank(underwriter);
+        vm.expectRevert("Exceeds cap");
+        vault.openLoan(address(splitter1), 495 * 1e6, keccak256("test"));
+    }
 
-        vm.startPrank(underwriter);
-        vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test"));
-        vm.stopPrank();
+    // -----------------------------------------------------------------------
+    // the flat fee regression
+    // -----------------------------------------------------------------------
 
-        // Buyer pays splitter (simulate x402 payment)
-        vm.startPrank(buyer1);
-        IERC20(usdc).safeTransfer(splitterAddr, 100 * 1e6); // $100 revenue
-        vm.stopPrank();
+    function test_FlatFeeIsActuallyCharged() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
 
-        // Keeper calls settle()
+        // Principal 400 + 8% fee = 432 total owed.
+        assertEq(vault.advanceOutstanding(address(splitter1)), 432 * 1e6);
+        assertEq(vault.totalDue(0), 432 * 1e6);
+
+        // Repay the whole thing and confirm the fee was collected.
+        _pay(splitter1, 2000 * 1e6);
         splitter1.settle();
 
-        // Check splits: 30% to vault, 70% to agent
         RunwayVault.Loan memory loan = vault.getLoan(0);
-        assertEq(loan.repaid, 30 * 1e6); // 30% of $100
-        // agentClaimable = loan principal (400) + agent share of revenue (70) = 470
-        assertEq(splitter1.agentClaimable(), 470 * 1e6);
+        assertEq(loan.repaid, 432 * 1e6, "repaid must include the fee");
+        assertEq(loan.repaid, loan.principal + (loan.principal * FEE_BPS) / 10000);
+        assertFalse(loan.active);
+        assertEq(vault.advanceOutstanding(address(splitter1)), 0);
+    }
+
+    function test_FeeIsChargedEvenOnTinyAdvances() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6);
+
+        // 100 + 8 = 108
+        assertEq(vault.advanceOutstanding(address(splitter1)), 108 * 1e6);
+
+        _pay(splitter1, 400 * 1e6);
+        splitter1.settle();
+        assertEq(vault.getLoan(0).repaid, 108 * 1e6);
+    }
+
+    // -----------------------------------------------------------------------
+    // settlement
+    // -----------------------------------------------------------------------
+
+    function test_SettleAndRepay() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+
+        _pay(splitter1, 100 * 1e6);
+        splitter1.settle();
+
+        // 30% of 100 repays the loan.
+        assertEq(vault.getLoan(0).repaid, 30 * 1e6);
+        // 432 owed, 30 repaid, 402 still outstanding to the vault.
+        assertEq(vault.advanceOutstanding(address(splitter1)), 402 * 1e6);
+        // Agent earns the other 70%.
+        assertEq(splitter1.agentClaimable(), 70 * 1e6);
         assertEq(splitter1.lifetimeRevenue(), 100 * 1e6);
     }
 
     function test_SettleIdempotent() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
 
-        vm.startPrank(underwriter);
-        vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test"));
-        vm.stopPrank();
-
-        // First payment
-        vm.startPrank(buyer1);
-        IERC20(usdc).safeTransfer(splitterAddr, 100 * 1e6);
-        vm.stopPrank();
-
+        _pay(splitter1, 100 * 1e6);
         splitter1.settle();
-        uint256 claimable1 = splitter1.agentClaimable(); // 400 + 70 = 470
-        uint256 repaid1 = vault.getLoan(0).repaid; // 30
+        uint256 claimable1 = splitter1.agentClaimable();
+        uint256 repaid1 = vault.getLoan(0).repaid;
 
-        // Call settle again with no new revenue - should be idempotent
         splitter1.settle();
         assertEq(splitter1.agentClaimable(), claimable1);
         assertEq(vault.getLoan(0).repaid, repaid1);
 
-        // New payment
-        vm.startPrank(buyer2);
-        IERC20(usdc).safeTransfer(splitterAddr, 50 * 1e6);
-        vm.stopPrank();
-
+        _pay(splitter1, 50 * 1e6);
         splitter1.settle();
-        // claimable1 (470) + 70% of 50 = 470 + 35 = 505
         assertEq(splitter1.agentClaimable(), claimable1 + 35 * 1e6);
-        assertEq(vault.getLoan(0).repaid, repaid1 + 15 * 1e6); // 30% of $50
+        assertEq(vault.getLoan(0).repaid, repaid1 + 15 * 1e6);
     }
 
-    function test_Withdraw() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+    function test_LenderShareCappedAtOutstanding() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6); // 108 owed
 
-        vm.startPrank(underwriter);
-        vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test"));
-        vm.stopPrank();
-
-        // Generate revenue
-        vm.startPrank(buyer1);
-        IERC20(usdc).safeTransfer(splitterAddr, 100 * 1e6);
-        vm.stopPrank();
-
+        // 30% of 1000 = 300 wanted, but only 108 is outstanding.
+        _pay(splitter1, 1000 * 1e6);
         splitter1.settle();
 
-        // Agent withdraws (agent1 has AGENT_ROLE)
-        vm.startPrank(agent1);
+        assertEq(vault.getLoan(0).repaid, 108 * 1e6);
+        assertFalse(vault.getLoan(0).active);
+
+        // Nothing stranded: every unit is the agent's once the loan closes.
+        assertEq(splitter1.surplus(), 0);
+        assertEq(splitter1.getAgentOwed(), splitter1.getBalance());
+    }
+
+    function test_ExcessLenderShareReturnsToAgent() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6); // 108 owed
+
+        // First settle closes the loan and keeps the remainder with the agent.
+        _pay(splitter1, 1000 * 1e6);
+        splitter1.settle();
+
+        // 1000 revenue, 108 repaid, 892 agent.
+        assertEq(splitter1.agentClaimable(), 892 * 1e6);
+        assertEq(splitter1.surplus(), 0);
+
+        // Later revenue has no loan, so all of it is the agent's.
+        _pay(splitter1, 50 * 1e6);
+        splitter1.settle();
+        assertEq(splitter1.agentClaimable(), 942 * 1e6);
+        assertEq(splitter1.surplus(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // the custody regression
+    // -----------------------------------------------------------------------
+
+    function test_AgentClaimNeverExceedsCustody() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+
+        for (uint256 i = 0; i < 10; i++) {
+            _pay(splitter1, 137 * 1e6);
+            splitter1.settle();
+
+            assertLe(splitter1.getAgentOwed(), splitter1.getBalance(), "agent owed must never exceed tokens held");
+            assertEq(splitter1.surplus(), 0, "no USDC may be stranded");
+        }
+    }
+
+    function test_WithdrawDrainsEverythingOwed() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+        _pay(splitter1, 2000 * 1e6);
+        splitter1.settle();
+
+        uint256 owed = splitter1.getAgentOwed();
+        vm.prank(agent1);
         splitter1.withdraw();
-        vm.stopPrank();
 
         assertEq(splitter1.agentClaimable(), 0);
-        // Agent had 1000 initial mint + 400 loan + 70 revenue share = 1470
-        assertEq(IERC20(usdc).balanceOf(agent1), 1470 * 1e6);
+        assertEq(vault.advanceOutstanding(address(splitter1)), 0);
+        assertEq(splitter1.getBalance(), 0);
+        assertEq(IERC20(usdc).balanceOf(agent1), 1000 * 1e6 + owed);
     }
 
+    function test_WithdrawNeverOverdraws() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+        _pay(splitter1, 100 * 1e6);
+        splitter1.settle();
+
+        uint256 held = splitter1.getBalance();
+        vm.prank(agent1);
+        splitter1.withdraw();
+
+        assertEq(splitter1.getBalance(), 0);
+        assertEq(IERC20(usdc).balanceOf(agent1), 1000 * 1e6 + held);
+    }
+
+    // -----------------------------------------------------------------------
+    // the settle underflow regression
+    // -----------------------------------------------------------------------
+
+    function test_SettleDoesNotUnderflowAfterWithdrawal() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+
+        // Agent pulls the advance out before any revenue arrives, which used to
+        // drop the balance below lastSettledBalance and revert the next settle.
+        vm.prank(agent1);
+        splitter1.withdraw();
+        assertEq(splitter1.getBalance(), 0);
+
+        _pay(splitter1, 300 * 1e6);
+        splitter1.settle();
+
+        assertEq(splitter1.lifetimeRevenue(), 300 * 1e6);
+        assertEq(vault.getLoan(0).repaid, 90 * 1e6);
+        assertEq(splitter1.agentClaimable(), 210 * 1e6);
+    }
+
+    function test_RepeatedWithdrawSettleCycles() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+
+        for (uint256 i = 0; i < 5; i++) {
+            _pay(splitter1, 250 * 1e6);
+            splitter1.settle();
+            vm.prank(agent1);
+            splitter1.withdraw();
+            assertEq(splitter1.getBalance(), 0);
+        }
+        assertEq(splitter1.surplus(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // the vault solvency regression
+    // -----------------------------------------------------------------------
+
+    function test_AdminCannotWithdrawFundsOwedToLender() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+
+        // Vault holds 50k, 432 of it is owed.
+        uint256 available = vault.availableToWithdraw();
+        assertEq(available, vault.getBalance() - vault.advanceOutstanding(address(splitter1)));
+
+        vm.prank(admin);
+        vm.expectRevert("Exceeds available balance");
+        vault.withdraw(available + 1);
+    }
+
+    function test_AdminCanWithdrawFreeBalance() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+
+        uint256 available = vault.availableToWithdraw();
+        vm.prank(admin);
+        vault.withdraw(available);
+
+        assertEq(vault.getBalance(), vault.getTotalOutstanding());
+        assertEq(vault.availableToWithdraw(), 0);
+    }
+
+    function test_VaultStaysSolventThroughFullRepayment() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+
+        uint256 vaultAfterDeposit = vault.getBalance();
+
+        _pay(splitter1, 2000 * 1e6);
+        splitter1.settle();
+
+        // Every unit the vault received is accounted for.
+        assertEq(vault.getBalance() - vaultAfterDeposit, 432 * 1e6);
+        assertEq(vault.getTotalOutstanding(), 0);
+        assertGe(vault.getBalance(), vault.getTotalOutstanding());
+    }
+
+    // -----------------------------------------------------------------------
+    // payout, delinquency, flags
+    // -----------------------------------------------------------------------
+
     function test_SetPayoutBlockedDuringLoan() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
 
-        vm.startPrank(underwriter);
-        vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test"));
-        vm.stopPrank();
+        bytes32 adminRole = splitter1.DEFAULT_ADMIN_ROLE();
+        vm.prank(address(vault));
+        splitter1.grantRole(adminRole, admin);
 
-        // Grant admin DEFAULT_ADMIN_ROLE on splitter (vault has DEFAULT_ADMIN_ROLE)
-        vm.startPrank(address(vault));
-        splitter1.grantRole(splitter1.DEFAULT_ADMIN_ROLE(), admin);
-        vm.stopPrank();
-
-        // Try to change payout - should fail because loan is active
-        vm.startPrank(admin);
+        vm.prank(admin);
         vm.expectRevert("Loan active: cannot change payout");
         splitter1.setPayout(agent2);
-        vm.stopPrank();
+    }
+
+    function test_SetPayoutAfterRepayment() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
+        _pay(splitter1, 2000 * 1e6);
+        splitter1.settle();
+
+        // Take the existing balance before redirecting, so this test isolates
+        // the payout change rather than measuring unclaimed principal.
+        vm.prank(agent1);
+        splitter1.withdraw();
+
+        bytes32 adminRole = splitter1.DEFAULT_ADMIN_ROLE();
+        vm.prank(address(vault));
+        splitter1.grantRole(adminRole, admin);
+
+        vm.prank(admin);
+        splitter1.setPayout(agent2);
+        assertEq(splitter1.payout(), agent2);
+
+        _pay(splitter1, 100 * 1e6);
+        splitter1.settle();
+        uint256 before = IERC20(usdc).balanceOf(agent2);
+        vm.prank(agent1);
+        splitter1.withdraw();
+        // agent2 already held its 1000 USDC setup mint.
+        assertEq(IERC20(usdc).balanceOf(agent2) - before, 100 * 1e6);
     }
 
     function test_MarkDelinquent() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
 
-        vm.startPrank(underwriter);
-        vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test"));
-        vm.stopPrank();
-
-        // Fast forward past due date
         vm.warp(block.timestamp + 31 * 86400);
-
-        // Mark delinquent (permissionless)
         vault.markDelinquent(0);
-
-        RunwayVault.Loan memory loan = vault.getLoan(0);
-        assertTrue(loan.delinquent);
+        assertTrue(vault.getLoan(0).delinquent);
     }
 
     function test_FlagLoan() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
 
-        vm.startPrank(underwriter);
-        vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test"));
-        vm.stopPrank();
-
-        // Watcher flags loan
-        vm.startPrank(watcher);
+        vm.prank(watcher);
         vault.flagLoan(0, keccak256("payee swap detected"));
-        vm.stopPrank();
+        assertTrue(vault.getLoan(0).flagged);
 
-        RunwayVault.Loan memory loan = vault.getLoan(0);
-        assertTrue(loan.flagged);
+        RevenueSplitter second = _newSplitter(agent1);
 
-        // Cannot open new loan for same splitter
-        vm.startPrank(admin);
-        address splitterAddr2 = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-
-        vm.startPrank(underwriter);
+        vm.prank(underwriter);
         vm.expectRevert("Splitter flagged");
-        vault.openLoan(splitterAddr2, 500 * 1e6, keccak256("test"));
-        vm.stopPrank();
+        vault.openLoan(address(second), 500 * 1e6, keccak256("test"));
     }
 
     function test_PauseBlocksNewLoans() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
+        splitter1 = _newSplitter(agent1);
 
-        vm.startPrank(admin);
+        vm.prank(admin);
         vault.pause();
-        vm.stopPrank();
 
-        vm.startPrank(underwriter);
+        vm.prank(underwriter);
         vm.expectRevert("Vault paused");
-        vault.openLoan(splitterAddr, 1000 * 1e6, keccak256("test"));
-        vm.stopPrank();
+        vault.openLoan(address(splitter1), 1000 * 1e6, keccak256("test"));
     }
 
     function test_FullLoanRepayment() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 400 * 1e6);
 
-        vm.startPrank(underwriter);
-        vault.openLoan(splitterAddr, 400 * 1e6, keccak256("test"));
-        vm.stopPrank();
-
-        // Generate enough revenue to repay (principal = 400, fee = 8% = 32, total = 432)
-        // With 30% share, need 432 / 0.3 = 1440 revenue
-        vm.startPrank(buyer1);
-        IERC20(usdc).safeTransfer(splitterAddr, 1440 * 1e6);
-        vm.stopPrank();
-
+        // 432 owed at a 30% share needs 1440 of revenue.
+        _pay(splitter1, 1440 * 1e6);
         splitter1.settle();
 
         RunwayVault.Loan memory loan = vault.getLoan(0);
-        assertFalse(loan.active); // Should be fully repaid
-        assertEq(loan.repaid, loan.principal);
-
-        // Splitter loan should be inactive
+        assertFalse(loan.active);
+        assertEq(loan.repaid, loan.principal + (loan.principal * FEE_BPS) / 10000);
         assertFalse(splitter1.loanActive());
+        assertEq(splitter1.surplus(), 0);
     }
 
     function test_CapGrowsWithRevenue() public {
-        vm.startPrank(admin);
-        address splitterAddr = factory.createSplitter(agent1, agent1);
-        vm.stopPrank();
-        splitter1 = RevenueSplitter(payable(splitterAddr));
+        splitter1 = _newSplitter(agent1);
 
-        // Initial cap: STARTER_CAP = 500
-        // Generate some revenue first (no loan)
-        vm.startPrank(buyer1);
-        IERC20(usdc).safeTransfer(splitterAddr, 1000 * 1e6);
-        vm.stopPrank();
+        _pay(splitter1, 1000 * 1e6);
+        splitter1.settle();
 
-        splitter1.settle(); // No loan active, all goes to agent
-
-        // Now cap should be STARTER_CAP + 2 * lifetimeRevenue = 500 + 2*1000 = 2500
-        // But capped at GLOBAL_MAX = 10000
-        vm.startPrank(underwriter);
-        uint256 loanId = vault.openLoan(splitterAddr, 2500 * 1e6, keccak256("test"));
-        vm.stopPrank();
-
+        // 500 + 2*1000 = 2500 of exposure allowed, fee included.
+        // 2320 + 185.6 = 2505.6 is still too much, so 2310 + 184.8 = 2494.8 fits.
+        uint256 principal = 2310 * 1e6;
+        vm.prank(underwriter);
+        uint256 loanId = vault.openLoan(address(splitter1), principal, keccak256("test"));
         assertEq(loanId, 0);
+    }
+
+    function test_SecondLoanAfterFullRepayment() public {
+        splitter1 = _newSplitter(agent1);
+
+        // First cycle.
+        _openLoan(splitter1, 400 * 1e6);
+        _pay(splitter1, 2000 * 1e6);
+        splitter1.settle();
+        assertFalse(vault.getLoan(0).active);
+
+        // Second cycle on the same splitter.
+        uint256 loanId = _openLoan(splitter1, 400 * 1e6);
+        assertEq(loanId, 1);
+        assertEq(vault.advanceOutstanding(address(splitter1)), 432 * 1e6);
+
+        _pay(splitter1, 2000 * 1e6);
+        splitter1.settle();
+        assertFalse(vault.getLoan(1).active);
+        assertEq(vault.getTotalOutstanding(), 0);
+    }
+
+    function test_ThreeLoanCycles() public {
+        splitter1 = _newSplitter(agent1);
+
+        for (uint256 i = 0; i < 3; i++) {
+            uint256 id = _openLoan(splitter1, 400 * 1e6);
+            _pay(splitter1, 2000 * 1e6);
+            splitter1.settle();
+            assertFalse(vault.getLoan(id).active, "loan should close");
+            assertEq(vault.getTotalOutstanding(), 0);
+            assertEq(splitter1.surplus(), 0);
+        }
+        assertEq(vault.getLoansLength(), 3);
     }
 }

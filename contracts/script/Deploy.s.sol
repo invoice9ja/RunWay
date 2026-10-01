@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
-import {RunwayVault} from "../src/RunwayVault.sol";
-import {RunwayFactory} from "../src/RunwayFactory.sol";
-import {RevenueSplitter} from "../src/RevenueSplitter.sol";
+import { Script, console } from "forge-std/Script.sol";
+import { RunwayVault } from "../src/RunwayVault.sol";
+import { RunwayFactory } from "../src/RunwayFactory.sol";
+import { RevenueSplitter } from "../src/RevenueSplitter.sol";
 
 contract Deploy is Script {
     // Deployment parameters (set via environment variables)
@@ -18,43 +18,33 @@ contract Deploy is Script {
     function run() external {
         // Load deployment parameters from env
         address usdc = vm.envAddress("USDC_ADDRESS");
-        address admin = vm.envAddress("ADMIN_ADDRESS");
-        address underwriter = vm.envAddress("UNDERWRITER_ADDRESS");
-        address watcher = vm.envAddress("WATCHER_ADDRESS");
+        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
 
-        vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
+        // .env carries placeholders for these, so derive the roles from the
+        // deployer key rather than requiring three more entries to maintain.
+        address deployer = vm.addr(deployerKey);
+        address admin = vm.envOr("ADMIN_ADDRESS", deployer);
+        address underwriter = vm.envOr("UNDERWRITER_ADDRESS", deployer);
+        address watcher = vm.envOr("WATCHER_ADDRESS", deployer);
+
+        vm.startBroadcast(deployerKey);
 
         // 1. Deploy RunwayVault
-        RunwayVault vault = new RunwayVault(
-            usdc,
-            GLOBAL_MAX,
-            STARTER_CAP,
-            FEE_BPS_DEFAULT,
-            SHARE_BPS_DEFAULT,
-            DUE_DAYS_DEFAULT
-        );
+        RunwayVault vault =
+            new RunwayVault(usdc, GLOBAL_MAX, STARTER_CAP, FEE_BPS_DEFAULT, SHARE_BPS_DEFAULT, DUE_DAYS_DEFAULT);
 
         // Grant roles
         vault.grantRole(vault.UNDERWRITER_ROLE(), underwriter);
         vault.grantRole(vault.WATCHER_ROLE(), watcher);
         vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), admin);
 
-        // 2. Deploy RevenueSplitter implementation (for reference)
-        RevenueSplitter splitterImpl = new RevenueSplitter(
-            address(vault),
-            address(0), // dummy
-            address(0), // dummy
-            usdc, // dummy USDC
-            DEFAULT_SHARE_BPS
-        );
+        // 2. Deploy RevenueSplitter implementation, used as the clone target.
+        //    Constructor leaves it uninitialised so it is never a live splitter.
+        RevenueSplitter splitterImpl = new RevenueSplitter();
 
-        // 3. Deploy RunwayFactory
-        RunwayFactory factory = new RunwayFactory(
-            address(vault),
-            address(splitterImpl),
-            usdc,
-            DEFAULT_SHARE_BPS
-        );
+        // 3. Deploy RunwayFactory, then initialise it once with its dependencies.
+        RunwayFactory factory = new RunwayFactory();
+        factory.initialize(address(vault), address(splitterImpl), usdc, DEFAULT_SHARE_BPS);
 
         // Grant factory admin role on vault
         vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), address(factory));
@@ -66,6 +56,7 @@ contract Deploy is Script {
         console.log("RunwayVault:", address(vault));
         console.log("RevenueSplitterImpl:", address(splitterImpl));
         console.log("RunwayFactory:", address(factory));
+        console.log("Fee on 1 USDC advance:", (FEE_BPS_DEFAULT * 1e6) / 10000, "USDC");
         console.log("USDC:", usdc);
         console.log("Admin:", admin);
         console.log("Underwriter:", underwriter);

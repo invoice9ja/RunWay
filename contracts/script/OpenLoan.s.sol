@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
-import {RunwayVault} from "../src/RunwayVault.sol";
+import { Script, console } from "forge-std/Script.sol";
+import { RunwayVault } from "../src/RunwayVault.sol";
 
 contract OpenLoan is Script {
     function run() external {
@@ -12,11 +12,16 @@ contract OpenLoan is Script {
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
 
-        RunwayVault(payable(vault)).openLoan(splitter, principal, keccak256("test loan"));
+        uint256 loanId = RunwayVault(payable(vault)).openLoan(splitter, principal, keccak256("test loan"));
 
         vm.stopBroadcast();
 
+        uint256 fee = (principal * 800) / 10000;
+
         console.log("Loan opened for splitter:", splitter);
+        console.log("Loan id:", loanId);
         console.log("Principal:", principal);
+        console.log("Flat fee (8%):", fee);
+        console.log("Total due:", principal + fee);
     }
 }

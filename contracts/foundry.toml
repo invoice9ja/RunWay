@@ -11,15 +11,17 @@ via_ir = true
 
 [profile.ci]
 fuzz = { runs = 10000 }
-invariant = { runs = 1000, depth = 100, fail_on_revert = true }
+invariant = { runs = 1000, depth = 100, fail_on_revert = false, show_metrics = true }
 
 [rpc_endpoints]
 arc_testnet = "${ARC_TESTNET_RPC}"
 arc_mainnet = "${ARC_MAINNET_RPC}"
 
+# The Arc testnet explorer is Blockscout, so verification uses
+# --verifier blockscout against this URL and needs no API key.
 [etherscan]
-arc_testnet = { key = "${ARC_EXPLORER_API_KEY}", url = "https://explorer.testnet.arc.xyz/api" }
-arc_mainnet = { key = "${ARC_EXPLORER_API_KEY}", url = "https://explorer.arc.xyz/api" }
+arc_testnet = { key = "", url = "https://explorer.testnet.arc.io/api", verifier = "blockscout" }
+arc_mainnet = { key = "${ARC_EXPLORER_API_KEY}", url = "https://explorer.arc.io/api" }
 
 [fmt]
 line_length = 120

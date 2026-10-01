@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
-import {RunwayFactory} from "../src/RunwayFactory.sol";
+import { Script, console } from "forge-std/Script.sol";
+import { RunwayFactory } from "../src/RunwayFactory.sol";
 
 contract CreateSplitter is Script {
     function run() external {
