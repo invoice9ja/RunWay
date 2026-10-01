@@ -71,16 +71,20 @@ ERC-20 transfers to a contract don't execute receiver code. Because the agent ca
 | **Demo Seller** | Paid endpoint using x402 with Arc USDC |
 | **Demo Buyer** | Generates paid traffic with real, small payments |
 
-### Dashboard (Next.js + Vercel)
+### Dashboard (Vite + React + Vercel)
 
-- Agent list & detail pages (revenue over time, repayment progress, terms, watcher status, underwriter rationale)
-- Explorer transaction links
-- Public read-only; operator actions (request advance) post-submission
+Nine routes: overview, splitters, advances, repayments, transactions, x402,
+contracts, threat model. Reads chain state directly through serverless endpoints
+(`/api/status`, `/api/keeper`, `/api/x402/resource`, `/api/demo/buy`), with
+explorer links throughout. Public read-only; operator actions post-submission.
 
 ### Data Layer
 
-- **Indexer**: Reads contract logs directly (no separate indexing service needed for MVP)
-- **Supabase (Postgres)**: Stores underwriting rationale reports (hashed on-chain)
+- **Indexer**: Reads contract logs directly. No separate indexing service for the MVP.
+- **Database**: `lib/db` exists as a Drizzle scaffold and is imported by
+  `artifacts/api-server`. Neither is used by the dashboard or services, which read
+  the chain directly. There is no Supabase project wired up, despite what an
+  earlier draft of this README said.
 
 ---
 
@@ -176,6 +180,47 @@ contract RunwayFactory {
 - Final limit = `min(model_limit, rule_limit, on_chain_cap)`
 - Rationale JSON is hashed; hash emitted in `LoanOpened` event for verification
 
+### What is actually built
+
+`services/underwriter/` scores a splitter and commits the decision to the loan's
+`rationaleHash`, which the vault stores and never reads. That is the design: the
+hash makes the rationale auditable after the fact and keeps the policy out of the
+contract.
+
+Two scoring modes. An optional LLM pass sees only on-chain metrics and returns a
+score plus reasons; it cannot return an amount or an address, so it cannot widen a
+position. A deterministic rules engine is always available as the fallback and as
+the thing to reason against. Every threshold is named and the output is
+reproducible from the same chain state.
+
+When the two modes **disagree on approve or decline**, the service declines and
+asks for a human. A disagreement means the metrics are wrong or the policy has
+drifted, and neither should open a position.
+
+`UNDERWRITER_DRY_RUN` defaults to `true`, so nothing is opened unless opted in.
+
+Verified against the live testnet deployment: a splitter with 36 USDC lifetime
+revenue and two prior advances scored 75 (threshold 60) and was approved without
+calling `openLoan`.
+
+### Watcher
+
+`services/watcher/` holds `WATCHER_ROLE` and decides which splitters to flag.
+`flagLoan` is the only way to mark an agent unborrowable, so what the service adds
+is the decision. Three rules, each derived from on-chain state and each carrying
+its evidence:
+
+| Rule | Trigger |
+|---|---|
+| `missed-repayment` | Advance past its due date with debt outstanding |
+| `payout-swap` | `PayoutChanged` while an advance is active |
+| `cap-inflation` | Outstanding debt ≥ 90% of lifetime revenue |
+
+`WATCHER_ALLOW` is empty by default, so the service reports and calls
+`markDelinquent` (which is permissionless) but never flags. A flag is permanent
+for the loan, so it should be hard to enable by accident. The watcher key is kept
+separate from the underwriter key so a compromised scorer cannot flag at will.
+
 ---
 
 ## Loan Terms (MVP Defaults)
@@ -201,8 +246,26 @@ contract RunwayFactory {
 | Borrower stops selling | Flat fee + revenue share: no revenue = no repayment | Lender loses principal (bounded by cap) |
 | Underwriter key compromised | Role can only open loans within on-chain caps; pause switch | Loss bounded by `GLOBAL_MAX` per agent |
 | USDC blacklist blocks agent payout | Pull-based `withdraw()`; repayment leg never touches agent address | Agent can't withdraw its own share |
-| Reentrancy / accounting bugs | `ReentrancyGuard`, invariant tests, tiny mainnet amounts | **Unaudited — prototype only** |
+| Reentrancy / accounting bugs | `ReentrancyGuard`, invariant tests, one regression test per fixed defect | **Unaudited — the tests were written alongside the fix, so they are not an independent check** |
 | Regulatory | Own funds only, no external depositors, labeled prototype | Real lending would need licensing analysis |
+
+### Defects found and fixed
+
+Six accounting defects were found by audit and are fixed. Each has a named
+regression test. The full list is tracked on the dashboard's `/threats` route,
+which separates open risks from resolved items.
+
+| Defect | Fix |
+|---|---|
+| Flat fee never charged | `repay()` applies against `totalDue` and returns the amount applied |
+| Agent claim exceeded custody | `agentClaimable` split from `advanceHeld`; `withdraw()` bounded by tokens held |
+| Excess lender share stranded | `repay()` returns what it applied; splitter caps first, remainder to the agent |
+| `settle()` could underflow | `lastSettledBalance` drops by the full amount withdrawn |
+| `withdraw()` ignored outstanding debt | `availableToWithdraw()` excludes advances; `withdraw()` is bounded by it |
+| Factory did not use clones | `Clones.clone` plus `initialize()`; 45-byte runtime |
+
+Debt was also tracked in two places (vault and splitter) and the copies drifted.
+The vault is now the single source of truth.
 
 ---
 
@@ -220,10 +283,9 @@ contract RunwayFactory {
 
 - **Contracts**: Solidity, Foundry, OpenZeppelin
 - **Services**: TypeScript, viem
-- **Dashboard**: Next.js, React, Tailwind CSS, shadcn/ui
-- **Database**: Supabase (Postgres)
-- **AI**: Claude API (underwriter)
-- **Deployment**: Vercel (dashboard), Arc mainnet (contracts)
+- **AI**: optional LLM pass in the underwriter, with a deterministic fallback
+- **Dashboard**: React + Tailwind on Vercel, reading chain state directly
+- **Deployment**: Vercel (dashboard), Arc testnet (contracts); mainnet pending
 
 ---
 
@@ -231,38 +293,35 @@ contract RunwayFactory {
 
 ```
 RunWay/
-├── artifacts/runway/      # Next.js dashboard (UI scaffold)
+├── artifacts/runway/      # Dashboard (Vite + React), 9 routes, Vercel-hosted
+│   ├── api/               # Serverless: status, keeper, x402, demo buy
+│   │   └── _lib/          # config, events, chain reads
 │   ├── src/
-│   │   ├── components/ui/     # shadcn/ui components (50+)
-│   │   ├── hooks/             # use-toast, use-mobile
-│   │   ├── lib/               # utils
-│   │   ├── pages/             # not-found
-│   │   ├── App.tsx            # Main app
-│   │   └── main.tsx           # Entry
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── tsconfig.json
-├── contracts/             # Solidity contracts (to be created)
-│   ├── src/
-│   │   ├── RevenueSplitter.sol
-│   │   ├── RunwayVault.sol
-│   │   └── RunwayFactory.sol
-│   ├── test/              # Unit, integration, invariant tests
-│   ├── script/            # Deploy scripts
-│   ├── foundry.toml
+│   │   ├── pages/         # overview, splitters, advances, repayments,
+│   │   │                  # transactions, x402, contracts, threats
+│   │   ├── components/    # app shell, sidebar, shared UI
+│   │   └── lib/           # chain status, formatting
+│   ├── vercel.json        # Arc testnet env + cron
 │   └── package.json
-├── services/              # TypeScript services (to be created)
+├── contracts/             # Solidity contracts (Foundry)
+│   ├── src/
+│   │   ├── RevenueSplitter.sol   # agent revenue pot, settle(), withdraw()
+│   │   ├── RunwayVault.sol       # lender deposits, advances, repayment
+│   │   └── RunwayFactory.sol     # minimal proxy deployment
+│   ├── test/              # 29 unit tests + 8 invariants
+│   ├── script/            # Deploy, CreateSplitter, Deposit, OpenLoan
+│   └── foundry.toml
+├── services/              # TypeScript services
 │   ├── keeper/            # settle() caller
-│   ├── watcher/           # payee monitor
-│   ├── underwriter/       # AI credit limits
+│   ├── watcher/           # flags splitters that break the rules
+│   ├── underwriter/       # scores splitters, writes rationaleHash
 │   ├── demo-seller/       # x402 endpoint
 │   └── demo-buyer/        # traffic generator
-├── scripts/               # Deployment & utility scripts
-│   ├── deploy.ts
-│   ├── verify.ts
-│   └── seed-demo.ts
-├── lib/                   # OpenZeppelin contracts (submodule)
-├── docs/                  # Additional documentation
+├── scripts/               # Deployment, verification, secret scanning
+│   ├── scan-secrets.mjs   # audits tracked files and history blobs
+│   └── pre-commit-secrets.sh
+├── lib/                   # OpenZeppelin + forge-std (submodules)
+├── .env.example           # every variable, no secrets
 ├── runway-prd.md          # Product Requirements Document
 └── README.md              # This file
 ```
@@ -271,9 +330,55 @@ RunWay/
 
 ## Roadmap & Status
 
-### Current Stage: **Pre-contracts (Day 0)**
+### Current Stage: **Testnet deployment live, three cycles repaid**
 
-The PRD is complete (`runway-prd.md`). No contracts, services, or dashboard code exists yet beyond a UI component scaffold in `artifacts/runway/`.
+Contracts are written, tested, deployed and verified on Arc testnet (chain 5042002).
+Three advances have been opened and driven to zero outstanding. The dashboard
+reads that deployment, and the watcher and underwriter services run against it.
+
+#### Deployed on Arc testnet
+
+| Contract | Address |
+|---|---|
+| `RunwayVault` | [`0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be`](https://explorer.testnet.arc.io/address/0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be) |
+| `RunwayFactory` | [`0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F`](https://explorer.testnet.arc.io/address/0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F) |
+| `RevenueSplitter` (impl) | [`0xc880AF5d5aC3ea27c26C47D132661A710C245ea5`](https://explorer.testnet.arc.io/address/0xc880AF5d5aC3ea27c26C47D132661A710C245ea5) |
+| `RevenueSplitter` (live clone) | [`0x06cebc9403c00d972e014e452509d04c7c350880`](https://explorer.testnet.arc.io/address/0x06cebc9403c00d972e014e452509d04c7c350880) |
+
+USDC on Arc testnet is `0x3600000000000000000000000000000000000000`.
+
+> The Arc testnet explorer runs **Blockscout**, not Etherscan. Verification uses
+> `forge verify-contract --verifier blockscout --verifier-url https://explorer.testnet.arc.io/api`
+> and needs no API key. See `contracts/foundry.toml`.
+
+#### Loan cycles on Arc testnet
+
+| Loan | Principal | Fee | Total due | Repaid | Outstanding |
+|---|---|---|---|---|---|
+| 0 | 10.00 | 8% | 10.80 | 10.80 | **0** |
+| 1 | 10.00 | 8% | 10.80 | 10.80 | **0** |
+| 2 | 12.00 | 8% | 12.96 | 12.96 | **0** |
+
+117 USDC lifetime revenue routed through the splitter. Final vault debt 0,
+splitter balance 0, `surplus()` 0. No loan delinquent or flagged.
+
+Cycle 2 was run deliberately through the two failure cases that the first round
+of fixes addressed: the agent withdrew its whole position *while debt was still
+outstanding*, and the last settlement carried more revenue than the debt
+remaining, so the lender share was capped and the remainder returned to the
+agent rather than stranded.
+
+**Caveat on this data:** the deployer was also the agent and the lender, and the
+lending pool funded the demo revenue. That is fine for exercising the
+accounting but it is not a demonstration of independent parties, and a reviewer
+should read the cycles accordingly.
+
+#### Tests
+
+29 unit tests and 8 invariants, 128,000 invariant calls per run, all passing. One
+regression test per fixed defect. The invariants assert the accounting identity
+directly: no stranded tokens, claims never exceed custody, and vault balance
+equals debt plus free balance.
 
 ### Submission Target: **Oct 7–8, 2026** (hard deadline Oct 14, 23:59 ET = Oct 15, 04:59 Lagos)
 
@@ -290,14 +395,16 @@ The PRD is complete (`runway-prd.md`). No contracts, services, or dashboard code
 | **Oct 8–13** | Watcher, underwriter, richer dashboard, second agent |
 
 ### Submission-Ready Criteria
-- [ ] Contracts verified on Arc explorer; addresses in README
-- [ ] ≥ 1 splitter, ≥ 3 loans opened and repaid on mainnet (all linkable)
-- [ ] Test suite passes, including invariant tests
+- [x] Contracts verified on the Arc explorer; addresses in README (testnet)
+- [x] ≥ 1 splitter, ≥ 3 loans opened and repaid (testnet; **mainnet still pending**)
+- [x] Test suite passes, including invariant tests
 - [ ] Live URL opens; public repo; public builder profile linked
+- [ ] Mainnet deployment and cycles on mainnet
 
 ### Post-Submission (Same Repo)
-- [ ] Watcher service
-- [ ] Underwriter service
+- [x] Watcher service
+- [x] Underwriter service
+
 - [ ] Richer dashboard
 - [ ] Second demo agent
 
@@ -311,43 +418,62 @@ The PRD is complete (`runway-prd.md`). No contracts, services, or dashboard code
 
 ## Getting Started
 
-> **Coming Oct 1–4**: Contract deployment addresses, deployment scripts, and service setup instructions.
-
-### Prerequisites (when ready)
+### Prerequisites
 - Node.js 20+
 - pnpm 9+
-- Foundry (for contracts)
-- Arc mainnet RPC endpoint
-- USDC on Arc mainnet (for gas + demo payments)
-- Supabase project (for underwriting reports)
-- Anthropic API key (for underwriter)
+- Foundry (`foundryup`)
+- Arc testnet USDC. The public RPC needs no key. No faucet endpoint was reachable
+  from the development environment, so funds were moved from an already-funded
+  account.
 
-### Environment Variables (`.env.example`)
+### Testnet addresses
+See [Current Stage](#current-stage-testnet-deployment-live-three-cycles-repaid).
+
+
+### Environment Variables
+
+`.env.example` is the authoritative list and carries no secrets. The names below
+differ in places and `.env.example` wins.
+
 ```bash
-# Contracts
-ARC_RPC_URL=
-ARC_CHAIN_ID=
+# RPC
+ARC_TESTNET_RPC=https://rpc.testnet.arc.network
+ARC_MAINNET_RPC=
+
+# Deployer. Testnet only, and MUST be rotated before any public demo.
 PRIVATE_KEY=
-USDC_ADDRESS=
-EXPLORER_API_KEY=
 
-# Services
-SUPABASE_URL=
-SUPABASE_SERVICE_KEY=
-ANTHROPIC_API_KEY=
+# Dashboard (artifacts/runway) — see vercel.json for the deployed values
+RUNWAY_NETWORK=arc-testnet
+RUNWAY_CHAIN_ID=5042002
+RUNWAY_VAULT_ADDRESS=0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be
+RUNWAY_FACTORY_ADDRESS=0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F
+RUNWAY_SPLITTER_ADDRESS=0x06cebc9403c00d972e014e452509d04c7c350880
+RUNWAY_PRIVATE_KEY=      # signs EIP-3009 auths; dedicated low-value key
+RUNWAY_KEEPER_SECRET=
 
-# Keeper
-KEEPER_INTERVAL_MS=300000
-SETTLE_THRESHOLD_USDC=10
+# Watcher — key holding the vault's WATCHER_ROLE
+WATCHER_PRIVATE_KEY=
+WATCHER_INTERVAL_MS=60000
+WATCHER_INFLATION_RATIO=0.9
+WATCHER_ALLOW=           # empty = report only, never flag
 
-# Watcher
-WATCHER_INTERVAL_MS=300000
-
-# Underwriter
-UNDERWRITER_SCHEDULE_CRON="0 2 * * *"
-GLOBAL_MAX_USDC=10000
-STARTER_CAP_USDC=500
+# Underwriter — key holding UNDERWRITER_ROLE
+UNDERWRITER_PRIVATE_KEY=
+UNDERWRITER_SPLITTER=
+UNDERWRITER_PRINCIPAL=10000000
+UNDERWRITER_MIN_SCORE=60
+UNDERWRITER_DRY_RUN=true
+UNDERWRITER_LLM_ENDPOINT=  # optional; falls back to the rules engine
 ```
+
+### Key hygiene
+
+The operational deployer key was exposed in an earlier session and is present in
+git history. It has **not** been rotated. `scripts/scan-secrets.mjs` reports it on
+every full scan, which is intentional: it should stay loud until it is fixed.
+
+Rotate before making this repository public, and before any mainnet use.
 
 ---
 
@@ -377,7 +503,7 @@ cd services/underwriter
 pnpm start                     # Run underwriter
 ```
 
-### Dashboard (Next.js)
+### Dashboard (Vite + React)
 ```bash
 cd artifacts/runway
 pnpm install
@@ -397,14 +523,34 @@ pnpm typecheck                 # Type check
 | Integration | Forge | Full loan lifecycle |
 | Invariant | Echidna/Forge | Accounting invariants |
 | Fuzz | Forge | Edge cases |
-| Static Analysis | Slither | 0 high/medium |
+| Static Analysis | Slither | **not run** |
+
+Current state: **29 unit tests and 8 invariants pass**, 128,000 invariant calls
+per run, reproduced across four fuzz seed batches.
 
 ### Key Invariants
-1. `totalVaultBalance == sum(loan.principal + loan.fee - loan.repaid)`
-2. `agentClaimable <= splitter.balance - lenderShare`
-3. `settle()` is idempotent
-4. No reentrancy possible
-5. Loan caps enforced: `principal <= min(GLOBAL_MAX, STARTER_CAP + 2 * lifetimeRevenue)`
+
+Implemented in `contracts/test/InvariantTest.t.sol`:
+
+| Invariant | Asserts |
+|---|---|
+| `noStrandedTokens` | held USDC equals what the agent is owed plus revenue pending settlement |
+| `settleClearsSurplus` | `settle()` is permissionless and leaves nothing unclaimed |
+| `agentClaimBackedByTokens` | a claim never exceeds the tokens backing it |
+| `vaultSolvent` | vault balance never falls below outstanding advances |
+| `vaultConservation` | `vault balance == debt + free balance` |
+| `debtIncludesFee` | `repaid + outstanding == principal + fee`, always |
+| `loanCapsEnforced` | total due never exceeds `GLOBAL_MAX`; never over-repaid |
+| `shareBpsValid` | share stays a valid percentage; a closed loan carries no debt |
+
+One caveat that matters: `noStrandedTokens` originally asserted `surplus() == 0` at
+all times, which is wrong. `surplus()` is legitimately non-zero between a payment
+and the `settle()` that attributes it, so the assertion failed on the ordinary
+pay-then-settle sequence. It now asserts the accounting identity instead, and
+`settleClearsSurplus` covers the property the original was reaching for.
+
+The regression tests were written by the same author as the fixes, so they encode
+one model of the defects rather than an independent check. Slither has not been run.
 
 ---
 
