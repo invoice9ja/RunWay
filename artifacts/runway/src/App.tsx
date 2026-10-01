@@ -14,6 +14,7 @@ import { RepaymentsPage } from '@/pages/repayments';
 import { TransactionsPage } from '@/pages/transactions';
 import { X402Page } from '@/pages/x402';
 import { ContractsPage } from '@/pages/contracts';
+import { TestsPage } from '@/pages/tests';
 import { ThreatsPage } from '@/pages/threats';
 import NotFound from '@/pages/not-found';
 
@@ -39,6 +40,7 @@ function Routes() {
       <Route path="/repayments" component={RepaymentsPage} />
       <Route path="/transactions" component={TransactionsPage} />
       <Route path="/x402" component={X402Page} />
+      <Route path="/tests" component={TestsPage} />
       <Route path="/threats" component={ThreatsPage} />
       <Route path="/status" component={OverviewPage} />
       <Route component={NotFound} />

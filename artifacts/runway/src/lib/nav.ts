@@ -3,8 +3,10 @@ import {
   ArrowDownRight,
   Blocks,
   FileCode2,
+  FlaskConical,
   Landmark,
   Layers3,
+  ShieldAlert,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -50,4 +52,7 @@ export const NAV_ITEMS: NavItem[] = [
       return data.settlements.length + data.receipts.length;
     },
   },
+  { path: '/x402', label: 'x402 loop', icon: Blocks },
+  { path: '/tests', label: 'Test suite', icon: FlaskConical },
+  { path: '/threats', label: 'Threats', icon: ShieldAlert },
 ];

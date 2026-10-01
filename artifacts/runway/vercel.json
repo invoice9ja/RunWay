@@ -26,6 +26,12 @@
     },
     "api/x402/resource.ts": {
       "maxDuration": 60
+    },
+    "api/demo/sell.ts": {
+      "maxDuration": 60
+    },
+    "api/tests/run.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
