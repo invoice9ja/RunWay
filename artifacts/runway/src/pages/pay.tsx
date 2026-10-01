@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { PageFooter, PageHeader } from '@/components/app-shell';
+import { shortAddress } from '@/lib/chain-status';
 import {
   ARC_TESTNET,
   approveUsdc,
@@ -49,6 +50,22 @@ async function readBody(response: Response): Promise<{ status: number; body: Rec
   }
 }
 
+/** What the seller returns once a payment settles. */
+type Receipt = {
+  resource?: string;
+  description?: string;
+  paid?: { raw: string; formatted: string };
+  payer?: string;
+  seller?: string;
+  routedTo?: string;
+  revenueShareBps?: number;
+  settled?: boolean;
+  transactions?: {
+    pull?: { hash?: string; explorer?: string };
+    route?: { hash?: string; explorer?: string };
+  };
+};
+
 type Stage = {
   id: string;
   label: string;
@@ -76,7 +93,7 @@ export function PayPage() {
   const [native, setNative] = useState<bigint | null>(null);
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [price, setPrice] = useState<bigint | null>(null);
-  const [resource, setResource] = useState<unknown>(null);
+  const [resource, setResource] = useState<Receipt | null>(null);
   const [stages, setStages] = useState<Stage[]>(STAGES.map((s) => ({ ...s, state: 'pending' })));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -226,7 +243,7 @@ export function PayPage() {
             `Seller returned ${settled.status} without a JSON body: ${settled.text.slice(0, 160)}`,
         );
       }
-      const body = settled.body;
+      const body = settled.body as unknown as Receipt;
       setResource(body);
       const route = (body.transactions as { route?: { explorer?: string } } | undefined)?.route
         ?.explorer;
@@ -411,15 +428,86 @@ export function PayPage() {
         <section className="section-card" data-testid="pay-resource">
           <div className="section-heading">
             <div className="section-title-wrap">
-              <div className="section-title">Resource delivered</div>
+              <div className="section-title">
+                {resource.description ?? 'Resource delivered'}
+              </div>
               <div className="section-subtitle">
-                Paid on chain. The receipt is already in the agent's splitter.
+                Paid on chain. The receipt is already in the agent&apos;s splitter, so the
+                lender&apos;s share settles from this payment without anyone chasing it.
               </div>
             </div>
-            <span className="section-kicker">PAID</span>
+            <span className="section-kicker">{resource.settled ? 'SETTLED' : 'PENDING'}</span>
           </div>
+
           <div className="risk-body">
-            <pre className="code-block">{JSON.stringify(resource, null, 2)}</pre>
+            <div className="param-grid">
+              <div className="param">
+                <div className="param-label">Paid</div>
+                <div className="param-value">{resource.paid?.formatted ?? '—'} USDC</div>
+              </div>
+              <div className="param">
+                <div className="param-label">Payer</div>
+                <div className="param-value" title={resource.payer}>
+                  {shortAddress(resource.payer ?? '')}
+                </div>
+              </div>
+              <div className="param">
+                <div className="param-label">Seller</div>
+                <div className="param-value" title={resource.seller}>
+                  {shortAddress(resource.seller ?? '')}
+                </div>
+              </div>
+              <div className="param">
+                <div className="param-label">Lender share</div>
+                <div className="param-value">
+                  {resource.revenueShareBps !== undefined
+                    ? `${resource.revenueShareBps / 100}%`
+                    : '—'}
+                </div>
+              </div>
+            </div>
+
+            <div className="tx-list" style={{ marginTop: 16 }}>
+              <TxRow
+                label="Pull from payer"
+                detail="USDC moved under your EIP-3009 signature"
+                hash={resource.transactions?.pull?.hash}
+                explorer={resource.transactions?.pull?.explorer}
+              />
+              <TxRow
+                label="Route to splitter"
+                detail="Revenue attributed to the agent, lender share settles from it"
+                hash={resource.transactions?.route?.hash}
+                explorer={resource.transactions?.route?.explorer}
+              />
+            </div>
+
+            <div className="x402-actions" style={{ marginTop: 16 }}>
+              <a
+                className="primary-button"
+                href="/splitters"
+              >
+                See the agent&apos;s revenue
+              </a>
+              <a className="secondary-button" href="/tests">
+                Run the protocol checks
+              </a>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  setResource(null);
+                  setStages(STAGES.map((st) => ({ ...st, state: 'pending' })));
+                }}
+              >
+                Pay again
+              </button>
+            </div>
+
+            <details className="raw-details">
+              <summary>Raw response</summary>
+              <pre className="code-block">{JSON.stringify(resource, null, 2)}</pre>
+            </details>
           </div>
         </section>
       )}
@@ -450,6 +538,31 @@ export function PayPage() {
 
       <PageFooter />
     </main>
+  );
+}
+
+/** One transaction, linked to the explorer. */
+function TxRow(props: { label: string; detail: string; hash?: string; explorer?: string }) {
+  return (
+    <div className="tx-row">
+      <span className="tx-dot" aria-hidden />
+      <span className="tx-body">
+        <span className="tx-label">{props.label}</span>
+        <span className="tx-detail">{props.detail}</span>
+      </span>
+      {props.explorer ? (
+        <a
+          className="secondary-button"
+          href={props.explorer}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          View on explorer
+        </a>
+      ) : (
+        <span className="section-kicker">PENDING</span>
+      )}
+    </div>
   );
 }
 

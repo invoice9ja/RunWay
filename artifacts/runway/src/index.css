@@ -830,6 +830,39 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.1 var(--app-font-serif); letter-spacin
 
 .x402-step.progress-done .x402-step-name { color: #2f6b4a; }
 .x402-step.progress-failed .x402-step-name { color: #9c3a30; }
+
+.tx-list { display: grid; gap: 10px; }
+
+.tx-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e2e9e5;
+  border-radius: 6px;
+  background: #fafcfb;
+}
+
+.tx-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2f6b4a;
+}
+
+.tx-body { display: flex; flex-direction: column; gap: 3px; flex: 1 1 auto; min-width: 0; }
+.tx-label { font-size: 12px; font-weight: 600; color: #23302b; }
+.tx-detail { font-size: 11px; color: #6f7f77; line-height: 1.55; }
+
+.raw-details { margin-top: 16px; }
+.raw-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: #5d7168;
+  padding: 4px 0;
+}
+.raw-details summary:hover { color: #2f6b4a; }
 .explainer { margin: 0; padding: 19px 20px 19px 40px; display: grid; gap: 11px; color: #5d7168; font-size: 11px; line-height: 1.7; }
 .explainer strong { color: #274b3d; }
 
