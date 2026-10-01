@@ -10,14 +10,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "ethers": "^6.13.0",
-    "dotenv": "^16.4.5"
+    "@workspace/runway-sdk": "workspace:*",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   }
 }

@@ -777,6 +777,25 @@ importers:
         specifier: ^17.0.0
         version: 17.7.3
 
+  lib/runway-sdk:
+    dependencies:
+      viem:
+        specifier: ^2.57.0
+        version: 2.57.0(typescript@5.9.3)(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.9.6
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.13
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   scripts:
     dependencies:
       dotenv:
@@ -823,14 +842,14 @@ importers:
 
   services/demo-seller:
     dependencies:
+      '@workspace/runway-sdk':
+        specifier: workspace:*
+        version: link:../../lib/runway-sdk
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
-      ethers:
-        specifier: ^6.13.0
-        version: 6.17.0
       express:
-        specifier: ^4.19.2
+        specifier: ^4.21.2
         version: 4.22.3(supports-color@8.1.1)
     devDependencies:
       '@types/express':

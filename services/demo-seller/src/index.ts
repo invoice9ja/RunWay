@@ -1,120 +1,123 @@
 #!/usr/bin/env node
 
-import { config } from "dotenv";
-config({ path: ".env" });
+/**
+ * Demo seller: a paid endpoint whose revenue routes through a Runway splitter.
+ *
+ * This is what an integration looks like. The x402 verification, the EIP-3009
+ * pull and the routing are all the SDK; the only application-specific parts are
+ * the two endpoints and the price.
+ *
+ * Run it, then buy from it with any x402 client.
+ */
 
-import express from "express";
-import { ethers } from "ethers";
-import { RevenueSplitter__factory } from "../contracts/typechain";
+import { config as loadEnv } from 'dotenv';
+loadEnv({ path: '.env' });
+
+import express from 'express';
+import {
+  createRunwayClient,
+  createSeller,
+  formatUsdc,
+  getSplitterStatus,
+  usdc,
+  type Address,
+} from '@workspace/runway-sdk';
 
 async function main() {
-  const network = process.env.NETWORK || "mainnet";
-  const rpcUrl = network === "mainnet" 
-    ? process.env.ARC_MAINNET_RPC 
-    : process.env.ARC_TESTNET_RPC;
-  
-  if (!rpcUrl) {
-    throw new Error(`RPC URL not configured for ${network}`);
+  const splitter = process.env.RUNWAY_SPLITTER_ADDRESS as Address | undefined;
+  if (!splitter) {
+    throw new Error('RUNWAY_SPLITTER_ADDRESS is not set. Deploy a splitter or set one in .env.');
   }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-  
-  console.log(`Starting Demo Seller on ${network}`);
+  const runway = createRunwayClient({
+    chainId: Number(process.env.RUNWAY_CHAIN_ID ?? 5042002),
+    network: process.env.RUNWAY_NETWORK ?? 'arc-testnet',
+    rpcUrl: process.env.ARC_TESTNET_RPC!,
+    // Signing is needed to pull the payment and route it.
+    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+  });
 
-  // Load deployed addresses
-  const fs = await import("fs");
-  const addressesFile = `deployed-${network}.json`;
-  if (!fs.existsSync(addressesFile)) {
-    throw new Error(`No deployment file found: ${addressesFile}`);
-  }
-  const { factory: factoryAddress, usdc: usdcAddress } = JSON.parse(fs.readFileSync(addressesFile, "utf8"));
+  const port = Number(process.env.DEMO_SELLER_PORT ?? 3001);
+  const origin = `http://localhost:${port}`;
+  const price = usdc(Number(process.env.DEMO_SELLER_PRICE ?? 0.1));
 
-  const factory = await import("../contracts/typechain").then(m => m.RunwayFactory__factory.connect(factoryAddress, provider));
-  const splitters = await factory.getAllSplitters();
-  
-  if (splitters.length === 0) {
-    throw new Error("No splitters deployed. Create one via factory first.");
-  }
+  const seller = createSeller({
+    runway,
+    splitter,
+    price,
+    description: 'Document extraction',
+    resource: `${origin}/api/extract`,
+  });
 
-  const splitterAddress = splitters[0]; // Use first splitter for demo
-  console.log(`Using splitter: ${splitterAddress}`);
+  const status = await getSplitterStatus(runway, splitter);
+  console.log(`Demo seller on ${runway.config.network}`);
+  console.log(`  splitter  ${splitter}`);
+  console.log(`  revenue   ${formatUsdc(status.lifetimeRevenue)} USDC lifetime`);
+  console.log(`  unsettled ${formatUsdc(status.unsettled)} USDC`);
+  console.log(`  price     ${formatUsdc(price)} USDC per call`);
+  console.log(`  endpoints GET /health, GET /.well-known/x402, GET /api/extract, POST /api/process`);
 
   const app = express();
   app.use(express.json());
 
-  // x402 payment middleware
-  const x402Middleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    // Check for x402 payment header
-    const paymentHeader = req.headers["x-payment"];
-    
-    if (!paymentHeader) {
-      // Return 402 with payment requirements
-      res.setHeader("WWW-Authenticate", `Payment x402; payTo="${splitterAddress}"; asset="${usdcAddress}"; amount="100000"`);
-      return res.status(402).json({
-        error: "Payment Required",
-        message: "This endpoint requires x402 payment",
-        payTo: splitterAddress,
-        asset: usdcAddress,
-        amount: "100000" // 0.1 USDC (6 decimals)
-      });
+  /**
+   * x402 gate. An unpaid request gets the 402 challenge; a paid one is verified
+   * and settled before the handler runs.
+   */
+  const requirePayment = async (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    const header = req.headers['x-payment'];
+    const raw = Array.isArray(header) ? header[0] : header;
+
+    const result = await seller.verify(raw);
+    if (!result.ok) {
+      if (result.status === 402 && result.error.includes('X-PAYMENT')) {
+        // No payment offered at all: this is the discovery response.
+        res.setHeader('WWW-Authenticate', 'Payment x402');
+        res.status(402).json(seller.challenge());
+        return;
+      }
+      res.status(result.status).json({ error: result.error, requiredAllowance: result.requiredAllowance });
+      return;
     }
 
-    // In a real implementation, you would verify the EIP-3009 signature here
-    // For demo purposes, we'll accept the payment and forward to the splitter
-    // The actual x402 flow: facilitator verifies signature, calls transferWithAuthorization
-    // The USDC ends up in the splitter via the facilitator
-    
-    console.log(`Payment received for ${req.path}`);
+    res.setHeader('X-PAYMENT-RESPONSE', Buffer.from(JSON.stringify({
+      success: true,
+      transaction: result.transactions.route,
+      payer: result.payer,
+      network: runway.config.network,
+    })).toString('base64'));
     next();
   };
 
-  // Protected endpoint - requires x402 payment
-  app.get("/api/extract", x402Middleware, (req: express.Request, res: express.Response) => {
-    // Simulate document extraction service
-    const result = {
-      text: "This is extracted text from your document.",
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', splitter, network: runway.config.network });
+  });
+
+  // Discovery, so a client can price a call before paying.
+  app.get('/.well-known/x402', (_req, res) => {
+    res.json(seller.challenge());
+  });
+
+  app.get('/api/extract', requirePayment, (_req, res) => {
+    res.json({
+      text: 'Extracted text from your document.',
       confidence: 0.95,
       pages: 1,
-      timestamp: new Date().toISOString()
-    };
-    res.json(result);
-  });
-
-  // Another protected endpoint
-  app.post("/api/process", x402Middleware, (req: express.Request, res: express.Response) => {
-    const { input } = req.body;
-    const result = {
-      output: `Processed: ${input}`,
-      timestamp: new Date().toISOString()
-    };
-    res.json(result);
-  });
-
-  // Health check (no payment required)
-  app.get("/health", (req: express.Request, res: express.Response) => {
-    res.json({ status: "ok", splitter: splitterAddress });
-  });
-
-  // x402 well-known endpoint for payment requirements discovery
-  app.get("/.well-known/x402", (req: express.Request, res: express.Response) => {
-    res.json({
-      payTo: splitterAddress,
-      asset: usdcAddress,
-      amount: "100000", // 0.1 USDC
-      description: "Document extraction API"
     });
   });
 
-  const PORT = parseInt(process.env.DEMO_SELLER_PORT || "3001");
-  app.listen(PORT, () => {
-    console.log(`Demo Seller running on port ${PORT}`);
-    console.log(`Splitter: ${splitterAddress}`);
-    console.log(`USDC: ${usdcAddress}`);
-    console.log(`Endpoints:`);
-    console.log(`  GET  /health`);
-    console.log(`  GET  /.well-known/x402`);
-    console.log(`  GET  /api/extract (requires x402 payment)`);
-    console.log(`  POST /api/process (requires x402 payment)`);
+  app.post('/api/process', requirePayment, (req, res) => {
+    const { input } = req.body as { input?: string };
+    res.json({ output: `Processed: ${input ?? ''}` });
+  });
+
+  app.listen(port, () => {
+    console.log(`\nListening on ${origin}`);
+    console.log(`Try: curl -i ${origin}/api/extract   # expect 402 with the payment requirements`);
   });
 }
 

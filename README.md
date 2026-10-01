@@ -311,6 +311,7 @@ RunWay/
 │   ├── test/              # 29 unit tests + 8 invariants
 │   ├── script/            # Deploy, CreateSplitter, Deposit, OpenLoan
 │   └── foundry.toml
+├── lib/runway-sdk/        # Published SDK: x402 seller, splits, advances
 ├── services/              # TypeScript services
 │   ├── keeper/            # settle() caller
 │   ├── watcher/           # flags splitters that break the rules
@@ -428,6 +429,81 @@ equals debt plus free balance.
 
 ### Testnet addresses
 See [Current Stage](#current-stage-testnet-deployment-live-three-cycles-repaid).
+
+### I run a paid AI endpoint. How do I get revenue into Runway?
+
+The whole integration is the SDK. An agent's x402 payment revenue is the
+collateral: the lender's share is taken automatically from what arrives, which is
+what makes an advance repayable without a credit check.
+
+**1. Install and point at Arc testnet.**
+
+```bash
+npm install @workspace/runway-sdk
+```
+
+```ts
+import { createRunwayClient, createSeller, usdc } from '@workspace/runway-sdk';
+
+const runway = createRunwayClient({
+  chainId: 5042002,                       // must match the settling chain
+  network: 'arc-testnet',
+  rpcUrl: process.env.ARC_TESTNET_RPC,     // public: https://rpc.testnet.arc.network
+  privateKey: process.env.PRIVATE_KEY,     // to pull and route the payment
+});
+```
+
+**2. Wrap your endpoint.** The SDK issues the 402, recovers the EIP-3009
+signature, checks amount, window, recipient, allowance and nonce, pulls the
+funds, and forwards them to your splitter.
+
+```ts
+const seller = createSeller({
+  runway,
+  splitter: '0xYourSplitter',
+  price: usdc(0.1),
+  description: 'Document extraction',
+  resource: 'https://api.example.com/extract',
+});
+
+app.get('/extract', async (req, res) => {
+  const result = await seller.verify(req.headers['x-payment'] as string | undefined);
+  if (!result.ok) {
+    if (result.status === 402) return res.status(402).json(seller.challenge());
+    return res.status(result.status).json({ error: result.error });
+  }
+  res.setHeader('X-PAYMENT-RESPONSE', encodeHeader({
+    success: true,
+    transaction: result.transactions.route,
+  }));
+  res.json({ text: 'extracted…' });
+});
+```
+
+**3. Settle.** Permissionless, so a keeper can do it for you.
+
+```ts
+import { settle, getSplitterStatus } from '@workspace/runway-sdk';
+await settle(runway, '0xYourSplitter');
+console.log(await getSplitterStatus(runway, '0xYourSplitter'));
+```
+
+**4. Request an advance** when cash-flow constrained.
+
+```ts
+import { requestAdvance, usdc } from '@workspace/runway-sdk';
+await requestAdvance(runway, { splitter, principal: usdc(10), rationale: '…' });
+```
+
+Full reference in [`lib/runway-sdk/README.md`](lib/runway-sdk/README.md). A
+runnable end-to-end version is `services/demo-seller`, and `pnpm --filter
+@workspace/runway-sdk run verify` settles a real payment and prints the result.
+
+**Two things that bite.** Build amounts with `usdc()`, never `0.1 * 1e6`:
+floating point gives `99999.99999999999` and a one-base-unit drift breaks
+signature comparison. And `chainId` is part of the EIP-712 domain the payer
+signs, so a wrong value means every payment is rejected.
+
 
 
 ### Environment Variables
