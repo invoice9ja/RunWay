@@ -1,15 +1,25 @@
 import { getPublicClient } from './_lib/chain.js';
 import { config, explorerAddress, explorerTx, formatUsdc } from './_lib/config.js';
 import { erc20Abi, factoryAbi, splitterAbi, vaultAbi } from './_lib/abi.js';
-import { addressArg, bigintArg, fetchEvents } from './_lib/events.js';
+import {
+  addressArg,
+  bigintArg,
+  fetchLogsForAddress,
+  newFetchStats,
+  topicsByName,
+} from './_lib/events.js';
 import type { Handler } from './_lib/http.js';
 
 /**
- * The public Arc endpoint rejects `eth_getLogs` over roughly 1,000 blocks, so
- * the window is kept under that. `fetchEvents` chunks internally, and Arc testnet
- * blocks every ~510s, so 900 blocks is roughly four days of history.
+ * Block window for event history.
+ *
+ * Sized to reach this deployment's real activity. Arc testnet blocks about every
+ * 510s, and the three loan cycles plus the x402 payments sit a few thousand blocks
+ * back, so a short window returns an empty dashboard that looks perfectly healthy.
+ * `fetchLogsForAddress` chunks the range and retries, which is how the endpoint's
+ * unreliability is handled; the window itself only needs to be long enough.
  */
-const LOOKBACK_BLOCKS = 900n;
+const LOOKBACK_BLOCKS = 20_000n;
 
 /**
  * Each read costs roughly twenty RPC calls, and the public Base Sepolia endpoint
@@ -119,55 +129,50 @@ const handler: Handler = async (_req, res) => {
     );
 
     /**
-     * A short window on purpose. The public Arc endpoint is unreliable over long
-     * ranges: it rejects some, rate-limits others, and answers some from a node
-     * whose index lags the head, returning zero rows for events that exist. That
-     * last case is the dangerous one, because it reads as "no activity" rather
-     * than as an error. Better a short honest window than a wide empty one.
+     * The window is sized to cover real history rather than to be safe: Arc testnet
+     * blocks about every 510s, so the loans and settlements in this deployment sit
+     * a few thousand blocks back. A window too short to reach them shows an empty
+     * dashboard that looks correct, which is the failure worth avoiding. Chunking
+     * and retries handle the endpoint's unreliability instead.
      */
     const fromBlock = head > LOOKBACK_BLOCKS ? head - LOOKBACK_BLOCKS : 0n;
 
-    const [settledRows, repaidRows, loanRows, receiptRows] = await Promise.all([
-      fetchEvents(
-        client,
-        {
-          address: config.splitter,
-          abi: splitterAbi,
-          eventName: 'Settled',
-          fromBlock,
-          toBlock: head,
-        },
-        explorerTx,
-      ),
-      fetchEvents(
-        client,
-        { address: config.vault, abi: vaultAbi, eventName: 'Repaid', fromBlock, toBlock: head },
-        explorerTx,
-      ),
-      fetchEvents(
-        client,
-        {
-          address: config.vault,
-          abi: vaultAbi,
-          eventName: 'LoanOpened',
-          fromBlock,
-          toBlock: head,
-        },
-        explorerTx,
-      ),
-      fetchEvents(
-        client,
-        {
-          address: config.usdc,
-          abi: erc20Abi,
-          eventName: 'Transfer',
-          fromBlock,
-          toBlock: head,
-          args: { to: config.splitter },
-        },
-        explorerTx,
-      ),
-    ]);
+    // One pass per address, then filter by topic locally. Querying per event name
+    // cost roughly eighty RPC calls per read and got rate-limited into silence.
+    const stats = newFetchStats();
+    // Sequential rather than concurrent: three simultaneous wide-range reads trip
+    // the public endpoint's rate limiter, which then fails the chunks it should
+    // have served.
+    const splitterLogs = await fetchLogsForAddress(
+      client,
+      { address: config.splitter, abi: splitterAbi, fromBlock, toBlock: head },
+      explorerTx,
+      stats,
+    );
+    const vaultLogs = await fetchLogsForAddress(
+      client,
+      { address: config.vault, abi: vaultAbi, fromBlock, toBlock: head },
+      explorerTx,
+      stats,
+    );
+    const usdcLogs = await fetchLogsForAddress(
+      client,
+      { address: config.usdc, abi: erc20Abi, fromBlock, toBlock: head },
+      explorerTx,
+      stats,
+    );
+
+    const settledTopic = topicsByName(splitterAbi).Settled;
+    const repaidTopic = topicsByName(vaultAbi).Repaid;
+    const loanTopic = topicsByName(vaultAbi).LoanOpened;
+    const transferTopic = topicsByName(erc20Abi).Transfer;
+
+    const settledRows = splitterLogs.filter((row) => row.topic0 === settledTopic);
+    const repaidRows = vaultLogs.filter((row) => row.topic0 === repaidTopic);
+    const loanRows = vaultLogs.filter((row) => row.topic0 === loanTopic);
+    const receiptRows = usdcLogs.filter(
+      (row) => row.topic0 === transferTopic && String(row.args.to).toLowerCase() === config.splitter.toLowerCase(),
+    );
 
     const repayments = repaidRows.slice(0, 25).map((row) => ({
       transaction: row.transaction,
@@ -252,7 +257,7 @@ const handler: Handler = async (_req, res) => {
         repaidEvents: repaidRows.length,
         loanOpenedEvents: loanRows.length,
         receiptEvents: receiptRows.length,
-        ...fetchEvents.lastRun,
+        ...stats,
       },
     };
     cache.set(key, { at: Date.now(), body: payload });

@@ -1,64 +1,114 @@
-import type { Abi, Address } from 'viem';
+import { decodeEventLog, toEventSelector, type Abi, type AbiEvent } from 'viem';
 
 import type { RunwayPublicClient } from './chain.js';
 
 /**
- * `eth_getLogs` window size.
+ * Block window per `eth_getLogs` request.
  *
- * The public Arc endpoint accepts small ranges reliably. Wider windows are
- * either rejected outright or, worse, answered from a lagging node that returns
- * zero rows for events that definitely exist, which reads as "no activity"
- * rather than as a failure.
+ * Measured against the public Arc endpoint: the full 20,000-block window in
+ * 10,000-block chunks is two requests and returns in under half a second, while
+ * 300-block chunks produced over two hundred requests and tripped the rate
+ * limiter. Fewer, wider requests are strictly better here. The limit exists at
+ * all because the endpoint rejects very long ranges.
  */
-const CHUNK = 250n;
+const CHUNK = 10_000n;
 
-/** Ceiling on chunks so one status read cannot fan out into hundreds of calls. */
-const MAX_CHUNKS = 24;
+/** Ceiling so one status read cannot fan out into an unbounded call storm. */
+const MAX_CHUNKS = 4;
 
-const RETRIES = 3;
+/**
+ * Errors are retried; empty results are not.
+ *
+ * Retrying empties was tripling the request count to defend against a lagging
+ * node, which triggered the rate limiting it was meant to avoid. A wide chunk
+ * served by a healthy node returns the events; if one chunk really is served
+ * stale, the next status poll picks them up, and the payload reports chunk
+ * failures so a persistent problem is visible.
+ */
+const RETRIES = 2;
 const BACKOFF_MS = 400;
 
 export type LogRow = {
   transaction: `0x${string}`;
   explorer: string;
   block: number;
+  topic0: string;
   args: Record<string, unknown>;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export type FetchStats = {
+  chunks: number;
+  retries: number;
+  failedChunks: number;
+  calls: number;
+  perAddress: Record<string, { chunks: number; calls: number; failedChunks: number }>;
+};
+
+export const newFetchStats = (): FetchStats => ({
+  chunks: 0,
+  retries: 0,
+  failedChunks: 0,
+  calls: 0,
+  perAddress: {},
+});
+
 /**
- * Fetch protocol events over a block window.
+ * topic0 for every event in an ABI, keyed by name.
  *
- * `eth_getLogs` on the public Arc endpoint is unreliable in a specific way: it
- * rejects long ranges, rate-limits under burst, and sometimes answers from a
- * node whose index lags the chain head and returns zero rows. The previous
- * version swallowed every error, so a total RPC failure surfaced as an empty
- * transaction list and looked like a protocol with no activity.
- *
- * So each chunk is retried, and a chunk that comes back empty is verified
- * against the address's unfiltered log count in the same range. Verified-empty
- * is dropped silently; unverifiable is retried and then reported.
+ * Resolved once up front so callers can filter decoded rows by event name
+ * without recomputing hashes or re-querying the chain.
  */
-export async function fetchEvents(
+export function topicsByName(abi: Abi): Record<string, `0x${string}`> {
+  const map: Record<string, `0x${string}`> = {};
+  for (const item of abi as readonly { type: string }[]) {
+    if (item.type !== 'event') continue;
+    const event = item as AbiEvent;
+    map[event.name] = toEventSelector(event);
+  }
+  return map;
+}
+
+/**
+ * Fetch every log an address emitted over a window, chunked and retried.
+ *
+ * One pass per address rather than one pass per event. The previous version
+ * issued a separate range request per event name, so five event queries across
+ * four chunks with retries came to roughly eighty RPC calls per status read,
+ * which the public endpoint rate-limits. Fetching once and filtering by topic
+ * locally cuts that to a third and keeps the history intact.
+ *
+ * Topics are decoded against the supplied ABI, so no second round trip is needed.
+ */
+export async function fetchLogsForAddress(
   client: RunwayPublicClient,
   options: {
-    address: Address;
+    address: `0x${string}`;
     abi: Abi;
-    eventName: string;
     fromBlock: bigint;
     toBlock: bigint;
-    args?: Record<string, unknown>;
   },
   explorerTx: (hash: string) => string,
+  stats: FetchStats,
 ): Promise<LogRow[]> {
   const rows: LogRow[] = [];
-  const stats = { chunks: 0, retries: 0, failedChunks: 0, verifiedEmpty: 0 };
-  fetchEvents.lastRun = stats;
+  const bucket = (stats.perAddress[options.address] ??= { chunks: 0, calls: 0, failedChunks: 0 });
 
-  for (let start = options.fromBlock, chunk = 0; start <= options.toBlock && chunk < MAX_CHUNKS; start += CHUNK, chunk += 1) {
+  const events = (options.abi as readonly { type: string }[])
+    .filter((item) => item.type === 'event')
+    .map((item) => item as AbiEvent);
+  const byTopic = new Map<string, AbiEvent>();
+  for (const event of events) byTopic.set(toEventSelector(event), event);
+
+  for (
+    let start = options.fromBlock, chunk = 0;
+    start <= options.toBlock && chunk < MAX_CHUNKS;
+    start += CHUNK, chunk += 1
+  ) {
     const end = start + CHUNK - 1n > options.toBlock ? options.toBlock : start + CHUNK - 1n;
     stats.chunks += 1;
+    bucket.chunks += 1;
 
     let collected: LogRow[] = [];
     let resolved = false;
@@ -68,47 +118,65 @@ export async function fetchEvents(
         stats.retries += 1;
         await sleep(BACKOFF_MS * attempt);
       }
+      stats.calls += 1;
+      bucket.calls += 1;
       try {
-        const logs = (await client.getContractEvents({
-          address: options.address,
-          abi: options.abi,
-          eventName: options.eventName,
-          fromBlock: start,
-          toBlock: end,
-          ...(options.args ? { args: options.args } : {}),
+        const logs = (await client.request({
+          method: 'eth_getLogs',
+          params: [
+            {
+              address: options.address,
+              fromBlock: `0x${start.toString(16)}`,
+              toBlock: `0x${end.toString(16)}`,
+            },
+          ],
         } as never)) as ReadonlyArray<{
           transactionHash: `0x${string}`;
-          blockNumber: bigint;
-          args?: Record<string, unknown>;
+          blockNumber: `0x${string}`;
+          topics: readonly `0x${string}`[];
+          data: `0x${string}`;
         }>;
 
-        collected = logs.map((log) => ({
-          transaction: log.transactionHash,
-          explorer: explorerTx(log.transactionHash),
-          block: Number(log.blockNumber),
-          args: (log.args ?? {}) as Record<string, unknown>,
-        }));
+        collected = logs.map((log) => {
+          const topic0 = log.topics[0] ?? '0x';
+          let args: Record<string, unknown> = {};
+          const definition = byTopic.get(topic0);
+          if (definition) {
+            try {
+              const decoded = decodeEventLog({
+                abi: [definition],
+                data: log.data,
+                topics: log.topics as unknown as [`0x${string}`, ...`0x${string}`[]],
+              });
+              args = (decoded.args ?? {}) as Record<string, unknown>;
+            } catch {
+              // Keep the row even when decoding fails, so the tx stays linked.
+            }
+          }
+          return {
+            transaction: log.transactionHash,
+            explorer: explorerTx(log.transactionHash),
+            block: Number(BigInt(log.blockNumber)),
+            topic0,
+            args,
+          };
+        });
 
-        // An empty result on this endpoint is ambiguous: it can mean no matching
-        // events, or a node whose index lags the chain head. Only trust it if a
-        // later attempt agrees, so give empties the same retry budget as errors.
-        if (logs.length > 0 || attempt === RETRIES) {
-          resolved = true;
-          if (logs.length === 0) stats.verifiedEmpty += 1;
-        }
+        resolved = true;
       } catch {
-        // Rate limited or rejected. Fall through to the next attempt.
+        // Rate limited or rejected; retry with backoff.
       }
     }
 
-    if (!resolved) stats.failedChunks += 1;
+    if (!resolved) {
+      stats.failedChunks += 1;
+      bucket.failedChunks += 1;
+    }
     rows.push(...collected);
   }
 
   return rows.sort((a, b) => b.block - a.block);
 }
-
-fetchEvents.lastRun = { chunks: 0, retries: 0, failedChunks: 0, verifiedEmpty: 0 };
 
 export function bigintArg(row: LogRow, key: string): bigint {
   return row.args[key] as bigint;
