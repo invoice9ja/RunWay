@@ -106,7 +106,28 @@ async function main() {
   );
 
   const provider = providerFor(rpcUrl);
-  const wallet = new ethers.Wallet(process.env.WATCHER_PRIVATE_KEY!, provider);
+
+  // Fail loudly and specifically. A non-null assertion here turns a missing key
+  // into an opaque ethers error deep in a wallet constructor, or worse, a wallet
+  // built from a default value that then silently fails every tx it signs.
+  const watcherKey = process.env.WATCHER_PRIVATE_KEY;
+  if (!watcherKey) {
+    throw new Error(
+      "WATCHER_PRIVATE_KEY is not set. The watcher needs its own key, distinct from " +
+        "the underwriter and the deployer, and it must hold WATCHER_ROLE on the vault. " +
+        "Set it in the environment (or .env) before starting.",
+    );
+  }
+  let walletAddress: string;
+  try {
+    const wallet = new ethers.Wallet(watcherKey, provider);
+    walletAddress = wallet.address;
+  } catch {
+    throw new Error(
+      "WATCHER_PRIVATE_KEY is set but is not a valid private key. Expected 0x followed by 64 hex characters.",
+    );
+  }
+
   const vaultAddress = process.env.RUNWAY_VAULT_ADDRESS;
   if (!vaultAddress) throw new Error("RUNWAY_VAULT_ADDRESS is not configured");
 
@@ -128,15 +149,15 @@ async function main() {
     "function getDebtOwed() view returns (uint256)",
   ];
 
-  const vault = new ethers.Contract(vaultAddress, vaultAbi, wallet);
+  const vault = new ethers.Contract(vaultAddress, vaultAbi, new ethers.Wallet(watcherKey, provider));
 
   console.log(`Watcher on ${network}`);
   console.log(`  vault:  ${vaultAddress}`);
-  console.log(`  signer: ${wallet.address}`);
+  console.log(`  signer: ${walletAddress}`);
   console.log(`  every:  ${intervalMs}ms`);
   console.log(`  flags:  ${allow.size === 0 ? "disabled (set WATCHER_ALLOW)" : `${allow.size} splitter(s)`}`);
 
-  const hasRole = await vault.hasRole(await vault.WATCHER_ROLE(), wallet.address).catch(() => false);
+  const hasRole = await vault.hasRole(await vault.WATCHER_ROLE(), walletAddress).catch(() => false);
   if (!hasRole) {
     console.warn("  warning: signer does not hold WATCHER_ROLE; flags will revert");
   }

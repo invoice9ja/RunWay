@@ -7,7 +7,7 @@ import { Section } from '@/components/section';
 const DEPLOYED = {
   vault: '0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7',
   factory: '0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76',
-  splitter: '0xe788d455223A6b5639D9140Ebf85fBE355424AB5',
+  splitter: '0x8C24a83a1103460a0845bE553fe070040f8c31D1',
   splitterImpl: '0xc880AF5d5aC3ea27c26C47D132661A710C245ea5',
   usdc: '0x3600000000000000000000000000000000000000',
   explorer: 'https://explorer.testnet.arc.io',

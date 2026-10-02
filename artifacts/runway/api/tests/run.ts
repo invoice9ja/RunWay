@@ -1,6 +1,6 @@
-import { getPublicClient, getAccount, requireWalletClient } from '../_lib/chain.js';
+import { getPublicClient, requireWalletClient } from '../_lib/chain.js';
 import { config, explorerTx, formatUsdc, isAuthorized } from '../_lib/config.js';
-import { erc20Abi, splitterAbi, vaultAbi } from '../_lib/abi.js';
+import { erc20Abi, splitterAbi, vaultAbi, customErrorsAbi } from '../_lib/abi.js';
 import type { Handler } from '../_lib/http.js';
 
 /**
@@ -31,13 +31,13 @@ type Entry = {
   description: string;
   costly: boolean;
   expect: string;
-  run: () => Promise<{ ok: boolean; detail: string; data?: unknown }>;
+  run: () => Promise<{ ok: boolean; detail: string; data?: unknown; skipped?: boolean }>;
 };
 
 const readSplitter = <T>(name: string) =>
   getPublicClient().readContract({
     address: config.splitter,
-    abi: splitterAbi,
+    abi: [...splitterAbi, ...customErrorsAbi],
     functionName: name,
   } as never) as Promise<T>;
 
@@ -58,6 +58,41 @@ const entry = (
  * that cannot fail is worse than no test, so the expected reason has to appear
  * in the revert string.
  */
+/**
+ * Viem reports a decoded `Error(string)` revert as a chain of wrapped causes:
+ * the top-level `message` is a generic "reverted with the following signature",
+ * and the human-readable reason lives further down (`shortMessage`, `details`,
+ * or `revert.args`). Matching on the top-level message alone makes every
+ * negative test fail for the wrong reason, so walk the whole chain and match
+ * against everything it says.
+ */
+function collectErrorText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 12; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.message);
+      const extra = current as Error & { shortMessage?: string; details?: string };
+      if (extra.shortMessage) parts.push(extra.shortMessage);
+      if (extra.details) parts.push(extra.details);
+      const revertArgs = (current as { revert?: { args?: unknown[] } }).revert?.args;
+      if (Array.isArray(revertArgs)) parts.push(revertArgs.map(String).join(' '));
+    } else {
+      parts.push(String(current));
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return parts.filter(Boolean).join(' | ');
+}
+
+function topLevelText(error: unknown): string {
+  if (error instanceof Error) {
+    const extra = error as Error & { shortMessage?: string };
+    return [error.message, extra.shortMessage].filter(Boolean).join(' ');
+  }
+  return String(error);
+}
+
 async function expectRevert(
   label: string,
   expectReason: RegExp,
@@ -67,17 +102,21 @@ async function expectRevert(
     await action();
     return { ok: false, detail: `${label} was ACCEPTED but should have reverted` };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/not found on ABI|does not exist|Unknown function/i.test(message)) {
+    // A malformed call never reaches the contract, so it is not a passing test.
+    // That is a viem-level fault, so inspect only the top-level message; a real
+    // revert's reason text can legitimately contain these words further down.
+    const top = topLevelText(error);
+    if (/not found on ABI|does not exist|Unknown function/i.test(top)) {
       return {
         ok: false,
-        detail: `false pass: the call never reached the contract (${message.split('\n')[0].slice(0, 90)})`,
+        detail: `false pass: the call never reached the contract (${top.split('\n')[0].slice(0, 90)})`,
       };
     }
+    const message = collectErrorText(error);
     if (!expectReason.test(message)) {
       return {
         ok: false,
-        detail: `reverted, but not for the reason under test. Expected ${expectReason}, got: ${message.split('\n')[0].slice(0, 110)}`,
+        detail: `reverted, but not for the reason under test. Expected ${expectReason}, got: ${message.slice(0, 200)}`,
       };
     }
     const matched = message.match(expectReason)?.[0];
@@ -157,9 +196,9 @@ const tests: Entry[] = [
     async () => {
       const client = getPublicClient();
       const [balance, outstanding, free] = await Promise.all([
-        client.readContract({ address: config.vault, abi: vaultAbi, functionName: 'getBalance' }),
-        client.readContract({ address: config.vault, abi: vaultAbi, functionName: 'getTotalOutstanding' }),
-        client.readContract({ address: config.vault, abi: vaultAbi, functionName: 'availableToWithdraw' }),
+        client.readContract({ address: config.vault, abi: [...vaultAbi, ...customErrorsAbi], functionName: 'getBalance' }),
+        client.readContract({ address: config.vault, abi: [...vaultAbi, ...customErrorsAbi], functionName: 'getTotalOutstanding' }),
+        client.readContract({ address: config.vault, abi: [...vaultAbi, ...customErrorsAbi], functionName: 'availableToWithdraw' }),
       ]);
       return {
         ok: balance === outstanding + free,
@@ -178,7 +217,7 @@ const tests: Entry[] = [
       const client = getPublicClient();
       const length = Number(await client.readContract({
         address: config.vault,
-        abi: vaultAbi,
+        abi: [...vaultAbi, ...customErrorsAbi],
         functionName: 'getLoansLength',
       }));
       const rows: unknown[] = [];
@@ -186,7 +225,7 @@ const tests: Entry[] = [
       for (let i = 0; i < length; i += 1) {
         const loan = await client.readContract({
           address: config.vault,
-          abi: vaultAbi,
+          abi: [...vaultAbi, ...customErrorsAbi],
           functionName: 'getLoan',
           args: [BigInt(i)],
         });
@@ -194,7 +233,7 @@ const tests: Entry[] = [
         const outstanding = loan.active
           ? await client.readContract({
               address: config.vault,
-              abi: vaultAbi,
+              abi: [...vaultAbi, ...customErrorsAbi],
               functionName: 'advanceOutstanding',
               args: [loan.splitter],
             })
@@ -238,10 +277,10 @@ const tests: Entry[] = [
         () =>
           client.simulateContract({
             address: config.vault,
-            abi: vaultAbi,
+            abi: [...vaultAbi, ...customErrorsAbi],
             functionName: 'openLoan',
             args: [fake, 1_000_000n, `0x${'00'.repeat(32)}`],
-            account: getAccount()?.address,
+            account: config.roles.underwriter,
           } as never),
       );
     },
@@ -254,16 +293,39 @@ const tests: Entry[] = [
     'revert "Exceeds cap"',
     async () => {
       const client = getPublicClient();
+
+      // `openLoan` rejects a splitter that already has a live loan before it
+      // ever evaluates the cap. So this test can only prove the cap while the
+      // configured splitter is idle. Check that precondition and report a skip
+      // rather than a failure, so a busy protocol never masquerades as a
+      // regression and a real cap regression still shows up as a failure.
+      const outstanding = (await client.readContract({
+        address: config.vault,
+        abi: [...vaultAbi, ...customErrorsAbi],
+        functionName: 'advanceOutstanding',
+        args: [config.splitter],
+      } as never)) as bigint;
+      if (outstanding > 0n) {
+        return {
+          ok: false,
+          skipped: true,
+          detail:
+            `skipped: ${config.splitter} has an active loan (${formatUsdc(outstanding)} outstanding), ` +
+            'so openLoan reverts "Active loan exists" before reaching the cap check. ' +
+            'The cap itself is covered deterministically by the forge suite.',
+        };
+      }
+
       return expectRevert(
         'openLoan for 1e12 USDC',
         /Exceeds cap/i,
         () =>
           client.simulateContract({
             address: config.vault,
-            abi: vaultAbi,
+            abi: [...vaultAbi, ...customErrorsAbi],
             functionName: 'openLoan',
             args: [config.splitter, 1_000_000_000_000n, `0x${'00'.repeat(32)}`],
-            account: getAccount()?.address,
+            account: config.roles.underwriter,
           } as never),
       );
     },
@@ -282,7 +344,7 @@ const tests: Entry[] = [
       const wallet = await requireWalletClient();
       const hash = await wallet.writeContract({
         address: config.splitter,
-        abi: splitterAbi,
+        abi: [...splitterAbi, ...customErrorsAbi],
         functionName: 'withdraw',
       } as never);
       await getPublicClient().waitForTransactionReceipt({ hash });
@@ -330,11 +392,15 @@ const handler: Handler = async (req, res) => {
   const started = Date.now();
   try {
     const result = await found.run();
-    res.status(result.ok ? 200 : 500).json({
+    // A test report is a successful response even when a test fails. Returning
+    // 500 makes a real protocol regression indistinguishable from the harness
+    // itself erroring, and breaks any monitor that keys off HTTP status.
+    res.status(200).json({
       id: found.id,
       title: found.title,
       expect: found.expect,
       pass: result.ok,
+      skipped: result.skipped ?? false,
       detail: result.detail,
       data: result.data,
       ms: Date.now() - started,

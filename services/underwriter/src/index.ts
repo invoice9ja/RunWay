@@ -366,10 +366,33 @@ async function main() {
       return;
     }
 
-    const signer = new ethers.Wallet(process.env.UNDERWRITER_PRIVATE_KEY!, provider);
+    // Fail loudly and specifically. A non-null assertion here turns a missing key
+    // into an opaque ethers error, or a wallet built from a default value that
+    // silently fails every tx. Better to stop at the first decision point.
+    const underwriterKey = process.env.UNDERWRITER_PRIVATE_KEY;
+    if (!underwriterKey) {
+      throw new Error(
+        "UNDERWRITER_PRIVATE_KEY is not set. The underwriter needs its own key, distinct " +
+          "from the watcher and the deployer, and it must hold UNDERWRITER_ROLE on the vault. " +
+          "Set it in the environment (or .env) before starting.",
+      );
+    }
+    let signer: ethers.Wallet;
+    try {
+      signer = new ethers.Wallet(underwriterKey, provider);
+    } catch {
+      throw new Error(
+        "UNDERWRITER_PRIVATE_KEY is set but is not a valid private key. Expected 0x followed by 64 hex characters.",
+      );
+    }
     const signerVault = vault.connect(signer) as typeof vault;
     const hasRole = await signerVault.hasRole(await vault.UNDERWRITER_ROLE(), signer.address);
-    if (!hasRole) throw new Error("signer does not hold UNDERWRITER_ROLE");
+    if (!hasRole) {
+      throw new Error(
+        `signer ${signer.address} does not hold UNDERWRITER_ROLE on ${vaultAddress}. ` +
+          "Grant it with grantRole(UNDERWRITER_ROLE(), <address>) from the vault admin.",
+      );
+    }
 
     const rationaleHash = ethers.solidityPackedKeccak256(
       ["string", "uint256", "uint256", "string"],

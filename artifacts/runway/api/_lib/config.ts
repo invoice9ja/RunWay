@@ -31,8 +31,37 @@ export const config = {
   /** Agent revenue router. Every x402 receipt is forwarded here. */
   splitter: readAddress(
     'RUNWAY_SPLITTER_ADDRESS',
-    '0xe788d455223A6b5639D9140Ebf85fBE355424AB5',
+    '0x8C24a83a1103460a0845bE553fe070040f8c31D1',
   ),
+
+  /**
+   * Role holders, for read-only simulation only. These are addresses, never
+   * keys: `simulateContract` needs a `from` to evaluate `msg.sender` but does
+   * not sign anything, so no private key is required or wanted here.
+   *
+   * A negative test must simulate from the role holder the contract checks, or
+   * it reverts at the access-control gate and never reaches the behaviour under
+   * test. Simulating from an unprivileged signer would report "unauthorized" and
+   * look like a pass while proving nothing.
+   */
+  roles: {
+    admin: readAddress(
+      'RUNWAY_ADMIN_ADDRESS',
+      '0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C',
+    ),
+    underwriter: readAddress(
+      'RUNWAY_UNDERWRITER_ADDRESS',
+      '0xa03D9bA207EE0D6F161bcd8E7F6B1d618F670813',
+    ),
+    watcher: readAddress(
+      'RUNWAY_WATCHER_ADDRESS',
+      '0x73Ff6742FF497cb9f282607ca5C827626F426a19',
+    ),
+    agent: readAddress(
+      'RUNWAY_AGENT_ADDRESS',
+      '0xa0aE5469b0f97BccFDD605E7862dEbfe37f03257',
+    ),
+  } as const,
 
   /**
    * Testnet-only operational key. It signs EIP-3009 authorizations for the demo

@@ -1,3 +1,47 @@
+/**
+ * Errors the contracts raise that are not plain `require` strings.
+ *
+ * Without these, viem sees an unknown 4-byte selector and reports "Unable to
+ * decode signature", which hides the real revert reason from every negative
+ * test. AccessControl in particular reverts with custom errors, so any call from
+ * an account missing a role decodes to nothing useful.
+ */
+export const customErrorsAbi = [
+  {
+    type: 'error',
+    name: 'AccessControlUnauthorizedAccount',
+    inputs: [
+      { name: 'account', type: 'address' },
+      { name: 'neededRole', type: 'bytes32' },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'AccessControlBadConfirmation',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'ERC20InsufficientBalance',
+    inputs: [
+      { name: 'sender', type: 'address' },
+      { name: 'balance', type: 'uint256' },
+      { name: 'needed', type: 'uint256' },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'ERC20InsufficientAllowance',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'allowance', type: 'uint256' },
+      { name: 'needed', type: 'uint256' },
+    ],
+  },
+  { type: 'error', name: 'NothingToWithdraw', inputs: [] },
+  { type: 'error', name: 'FactoryAlreadyInitialized', inputs: [] },
+] as const;
+
 export const erc20Abi = [
   {
     type: 'function',

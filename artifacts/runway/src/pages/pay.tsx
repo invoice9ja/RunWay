@@ -548,4 +548,4 @@ function TxRow(props: { label: string; detail: string; hash?: string; explorer?:
 }
 
 /** Must match the seller's payTo; the vault and dashboard both use this splitter. */
-const SELLER_PAY_TO = '0xe788d455223A6b5639D9140Ebf85fBE355424AB5' as `0x${string}`;
+const SELLER_PAY_TO = '0x8C24a83a1103460a0845bE553fe070040f8c31D1' as `0x${string}`;

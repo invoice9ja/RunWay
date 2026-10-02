@@ -4,7 +4,7 @@
   "vault": "0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7",
   "splitterImpl": "0x73f05b740bbf1e55c7cc3f56ce5a20a04f0af6ee",
   "factory": "0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76",
-  "splitter": "0xe788d455223A6b5639D9140Ebf85fBE355424AB5",
+  "splitter": "0x8C24a83a1103460a0845bE553fe070040f8c31D1",
   "usdc": "0x3600000000000000000000000000000000000000",
   "explorer": "https://explorer.testnet.arc.io",
   "explorerKind": "blockscout",
@@ -26,7 +26,8 @@
     "principal": 5,
     "totalDue": 5.4,
     "lenderShareBps": 3000,
-    "feeBps": 800
+    "feeBps": 800,
+    "note": "Exercised on this splitter: 5.00 advance, 18.00 revenue, 5.40 repaid, 12.60 to agent, surplus 0."
   },
   "roles": {
     "admin": {
@@ -36,10 +37,10 @@
       ],
       "splitterRoles": [],
       "purpose": "deposit, withdraw free funds, pause, register splitters",
-      "note": "No longer the agent. Role rotation is the next step."
+      "note": "Deployer only. Holds the vault DEFAULT_ADMIN_ROLE so a lost agent key is recoverable. Not used for payment signing."
     },
     "underwriter": {
-      "address": "0xe5A83d9efa7Be9dA6CAe31d533A60715407bF553",
+      "address": "0xa03D9bA207EE0D6F161bcd8E7F6B1d618F670813",
       "vaultRoles": [
         "UNDERWRITER_ROLE"
       ],
@@ -47,7 +48,7 @@
       "purpose": "opens advances via openLoan"
     },
     "watcher": {
-      "address": "0x9921130CDA8E78d111761e130e2BD7b22acDb292",
+      "address": "0x73Ff6742FF497cb9f282607ca5C827626F426a19",
       "vaultRoles": [
         "WATCHER_ROLE"
       ],
@@ -55,24 +56,17 @@
       "purpose": "flags splitters via flagLoan"
     },
     "agent": {
-      "address": "0xC7F53Dc6e33A6a80c47845FAcEa64E8216531913",
+      "address": "0xa0aE5469b0f97BccFDD605E7862dEbfe37f03257",
       "vaultRoles": [],
       "splitterRoles": [
         "DEFAULT_ADMIN_ROLE",
         "AGENT_ROLE"
       ],
       "purpose": "owns the splitter, withdraws its revenue, administers its own contract",
-      "note": "DEFAULT_ADMIN_ROLE on the splitter is the fix: it makes the agent key recoverable and payout redirectable."
-    },
-    "payer": {
-      "address": "0xC7F53Dc6e33A6a80c47845FAcEa64E8216531913",
-      "vaultRoles": [],
-      "splitterRoles": [],
-      "purpose": "payout destination for the agent above; also the demo buyer",
-      "note": "Testnet only. In production payout and payer would be separate."
+      "note": "Holds DEFAULT_ADMIN_ROLE and AGENT_ROLE on its own splitter, so a lost key is recoverable and payout can be redirected. Agent and payout are the same address here for simplicity; splitting them only changes payout(), never authority."
     },
     "settler": {
-      "address": "0x994203C52093B0558361878ca2688267610914E3",
+      "address": "0x2D430368217048304e14a2a02F230e0cBa49B6aF",
       "vaultRoles": [],
       "purpose": "signs EIP-3009 payments in the hosted seller; holds a small float"
     }
@@ -80,7 +74,7 @@
   "notes": [
     "Everything here is Arc TESTNET. The contracts do not exist on Arc mainnet.",
     "The splitter is a minimal proxy clone of splitterImpl, deployed by the factory.",
-    "This is the second deployment. The first (vault 0xc9497Ec4) had a splitter-admin lock where nobody could grant or revoke a role on a splitter, fixing it required a contract change, and it is superseded.",
-    "The agent holds DEFAULT_ADMIN_ROLE on its own splitter so a lost key is recoverable and payout can be redirected."
+    "Third deployment. Splitter 0xe788d455 was created for an agent key that was then lost, leaving its 12.60 claimable stranded; it is superseded and abandoned.",
+    "Each role uses a distinct key. Only the deployer administers the vault; the agent administers its own splitter."
   ]
 }
