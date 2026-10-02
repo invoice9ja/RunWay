@@ -5,9 +5,9 @@ import { PageFooter, PageHeader } from '@/components/app-shell';
 import { Section } from '@/components/section';
 
 const DEPLOYED = {
-  vault: '0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7',
-  factory: '0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76',
-  splitter: '0x8C24a83a1103460a0845bE553fe070040f8c31D1',
+  vault: '0x30f5f5d45bbf94487fa3cae069d5bdaadb6744ab',
+  factory: '0xc8f5ae45cfbc7a9f17248fd610adc989f8d08106',
+  splitter: '0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279',
   splitterImpl: '0xc880AF5d5aC3ea27c26C47D132661A710C245ea5',
   usdc: '0x3600000000000000000000000000000000000000',
   explorer: 'https://explorer.testnet.arc.io',

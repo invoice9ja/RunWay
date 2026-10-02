@@ -1,18 +1,18 @@
 {
   "network": "arc-testnet",
   "chainId": 5042002,
-  "vault": "0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7",
-  "splitterImpl": "0x73f05b740bbf1e55c7cc3f56ce5a20a04f0af6ee",
-  "factory": "0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76",
-  "splitter": "0x8C24a83a1103460a0845bE553fe070040f8c31D1",
+  "vault": "0x30f5f5d45bbf94487fa3cae069d5bdaadb6744ab",
+  "splitterImpl": "0x8e0898723c4dd84271b3f307c137a344f69009e8",
+  "factory": "0xc8f5ae45cfbc7a9f17248fd610adc989f8d08106",
+  "splitter": "0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279",
   "usdc": "0x3600000000000000000000000000000000000000",
   "explorer": "https://explorer.testnet.arc.io",
   "explorerKind": "blockscout",
   "status": "deployed_and_exercised",
   "verified": {
-    "vault": true,
-    "factory": true,
-    "splitterImpl": true
+    "vault": false,
+    "factory": false,
+    "splitterImpl": false
   },
   "caps": {
     "globalMaxUsdc": 10,
@@ -27,7 +27,7 @@
     "totalDue": 5.4,
     "lenderShareBps": 3000,
     "feeBps": 800,
-    "note": "Exercised on this splitter: 5.00 advance, 18.00 revenue, 5.40 repaid, 12.60 to agent, surplus 0."
+    "note": "Exercised on this vault: 5.00 advance, 18.00 revenue, 5.40 repaid, 12.60 to agent, surplus 0, outstanding 0."
   },
   "roles": {
     "admin": {
@@ -74,7 +74,9 @@
   "notes": [
     "Everything here is Arc TESTNET. The contracts do not exist on Arc mainnet.",
     "The splitter is a minimal proxy clone of splitterImpl, deployed by the factory.",
-    "Third deployment. Splitter 0xe788d455 was created for an agent key that was then lost, leaving its 12.60 claimable stranded; it is superseded and abandoned.",
+    "Fourth vault. The third (0x0f1a59fc) is superseded because repay() credited debt without checking msg.sender, so anyone could erase a loan for free and inflate availableToWithdraw. Fixed in this vault; see the repay authority tests.",
+    "Second abandoned splitter (0x8C24a83a) belongs to the current agent but points at the superseded vault. Unused; the vault it targets is retired.",
+    "First vault (0xc9497Ec4) is also superseded.",
     "Each role uses a distinct key. Only the deployer administers the vault; the agent administers its own splitter."
   ]
 }

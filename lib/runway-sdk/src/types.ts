@@ -14,10 +14,10 @@ export const USDC_ARC_TESTNET: Address = '0x360000000000000000000000000000000000
  * an address that could not grant roles. Kept here as a reminder not to fall
  * back to it.
  */
-export const FACTORY_ARC_TESTNET: Address = '0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76';
+export const FACTORY_ARC_TESTNET: Address = '0xc8f5ae45cfbc7a9f17248fd610adc989f8d08106';
 
 /** RunwayVault on Arc testnet. Current deployment; see the note above. */
-export const VAULT_ARC_TESTNET: Address = '0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7';
+export const VAULT_ARC_TESTNET: Address = '0x30f5f5d45bbf94487fa3cae069d5bdaadb6744ab';
 
 export type PaymentRequirements = {
   scheme: 'exact';

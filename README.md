@@ -341,10 +341,10 @@ reads that deployment, and the watcher and underwriter services run against it.
 
 | Contract | Address |
 |---|---|
-| `RunwayVault` | [`0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7`](https://explorer.testnet.arc.io/address/0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7) |
-| `RunwayFactory` | [`0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76`](https://explorer.testnet.arc.io/address/0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76) |
+| `RunwayVault` | [`0x30f5f5d45bbf94487fa3cae069d5bdaadb6744ab`](https://explorer.testnet.arc.io/address/0x30f5f5d45bbf94487fa3cae069d5bdaadb6744ab) |
+| `RunwayFactory` | [`0xc8f5ae45cfbc7a9f17248fd610adc989f8d08106`](https://explorer.testnet.arc.io/address/0xc8f5ae45cfbc7a9f17248fd610adc989f8d08106) |
 | `RevenueSplitter` (impl) | [`0xc880AF5d5aC3ea27c26C47D132661A710C245ea5`](https://explorer.testnet.arc.io/address/0xc880AF5d5aC3ea27c26C47D132661A710C245ea5) |
-| `RevenueSplitter` (live clone) | [`0x8C24a83a1103460a0845bE553fe070040f8c31D1`](https://explorer.testnet.arc.io/address/0x8C24a83a1103460a0845bE553fe070040f8c31D1) |
+| `RevenueSplitter` (live clone) | [`0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279`](https://explorer.testnet.arc.io/address/0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279) |
 
 USDC on Arc testnet is `0x3600000000000000000000000000000000000000`.
 
@@ -531,9 +531,9 @@ PRIVATE_KEY=
 # Dashboard (artifacts/runway) — see vercel.json for the deployed values
 RUNWAY_NETWORK=arc-testnet
 RUNWAY_CHAIN_ID=5042002
-RUNWAY_VAULT_ADDRESS=0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7
-RUNWAY_FACTORY_ADDRESS=0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76
-RUNWAY_SPLITTER_ADDRESS=0x8C24a83a1103460a0845bE553fe070040f8c31D1
+RUNWAY_VAULT_ADDRESS=0x30f5f5d45bbf94487fa3cae069d5bdaadb6744ab
+RUNWAY_FACTORY_ADDRESS=0xc8f5ae45cfbc7a9f17248fd610adc989f8d08106
+RUNWAY_SPLITTER_ADDRESS=0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279
 RUNWAY_PRIVATE_KEY=      # signs EIP-3009 auths; dedicated low-value key
 RUNWAY_KEEPER_SECRET=
 
