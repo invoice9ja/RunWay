@@ -6,11 +6,18 @@ export const X402_VERSION = 1;
 /** USDC on Arc testnet. */
 export const USDC_ARC_TESTNET: Address = '0x3600000000000000000000000000000000000000';
 
-/** RunwayFactory on Arc testnet, chain 5042002. */
-export const FACTORY_ARC_TESTNET: Address = '0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F';
+/**
+ * RunwayFactory on Arc testnet, chain 5042002.
+ *
+ * Current deployment. The first testnet deployment (factory 0x62F0bE8a, vault
+ * 0xc9497Ec4) is superseded and must not be used: its splitter locked admin to
+ * an address that could not grant roles. Kept here as a reminder not to fall
+ * back to it.
+ */
+export const FACTORY_ARC_TESTNET: Address = '0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76';
 
-/** RunwayVault on Arc testnet. */
-export const VAULT_ARC_TESTNET: Address = '0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be';
+/** RunwayVault on Arc testnet. Current deployment; see the note above. */
+export const VAULT_ARC_TESTNET: Address = '0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7';
 
 export type PaymentRequirements = {
   scheme: 'exact';
