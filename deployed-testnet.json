@@ -10,9 +10,9 @@
   "explorerKind": "blockscout",
   "status": "deployed_and_exercised",
   "verified": {
-    "vault": false,
-    "factory": false,
-    "splitterImpl": false
+    "vault": true,
+    "factory": true,
+    "splitterImpl": true
   },
   "caps": {
     "globalMaxUsdc": 10,
@@ -79,5 +79,11 @@
     "First vault (0xc9497Ec4) is also superseded.",
     "Each role uses a distinct key. Only the deployer administers the vault; the agent administers its own splitter."
   ],
-  "verificationNote": "Unverified. Blockscout at explorer.testnet.arc.io rejects verification without ARC_EXPLORER_API_KEY, which is empty in .env. Set it, or submit through the web UI, then flip these to true."
+  "verification": {
+    "explorer": "https://explorer.testnet.arc.io",
+    "chainId": 5042002,
+    "note": "Arc testnet runs Blockscout, which verifies keyless. Do NOT use an Etherscan key here. The command that works is below; forge defaults to the Etherscan verifier and will demand a key unless you pass --verifier blockscout.",
+    "command": "forge verify-contract <address> src/<File>.sol:<Contract> --chain-id 5042002 --verifier blockscout --verifier-url https://explorer.testnet.arc.io/api/ --constructor-args $(cast abi-encode \"constructor(address,uint256,uint256,uint256,uint256,uint256,uint256)\" 0x3600000000000000000000000000000000000000 10000000000 500000000 800 3000 30 3000)",
+    "caveat": "Arc docs point at testnet.arcscan.app, which 301s. Use explorer.testnet.arc.io, and expect \"Too many requests\" between submissions."
+  }
 }
