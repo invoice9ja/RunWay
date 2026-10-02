@@ -22,16 +22,16 @@ export const config = {
   ),
   vault: readAddress(
     'RUNWAY_VAULT_ADDRESS',
-    '0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be',
+    '0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7',
   ),
   factory: readAddress(
     'RUNWAY_FACTORY_ADDRESS',
-    '0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F',
+    '0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76',
   ),
   /** Agent revenue router. Every x402 receipt is forwarded here. */
   splitter: readAddress(
     'RUNWAY_SPLITTER_ADDRESS',
-    '0x06cebc9403c00d972e014e452509d04c7c350880',
+    '0xe788d455223A6b5639D9140Ebf85fBE355424AB5',
   ),
 
   /**

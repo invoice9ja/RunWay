@@ -92,9 +92,21 @@ contract RevenueSplitter is AccessControl, ReentrancyGuard {
         usdc = _usdc;
         shareBps = _shareBps;
 
+        // The vault administers the splitter, because `setPayout` is gated on
+        // DEFAULT_ADMIN_ROLE and the lender should be able to correct a
+        // misconfigured payout while no advance is outstanding.
         _grantRole(DEFAULT_ADMIN_ROLE, _vault);
         _grantRole(VAULT_ROLE, _vault);
         _grantRole(AGENT_ROLE, _agent);
+
+        // The agent administers its own splitter too.
+        //
+        // Without this the vault was the sole admin and exposes no way to
+        // delegate, so nobody could ever grant or revoke a role on a splitter:
+        // the agent could not move a lost key, and `payout` was fixed for the
+        // life of the contract. Sharing admin is what makes the agent's key
+        // recoverable, which is the whole point of a per-agent contract.
+        _grantRole(DEFAULT_ADMIN_ROLE, _agent);
 
         emit Initialized(_agent, _payout, _shareBps);
     }

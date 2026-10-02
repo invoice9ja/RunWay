@@ -561,4 +561,64 @@ contract RunwayTest is Test {
         }
         assertEq(vault.getLoansLength(), 3);
     }
+
+    /**
+     * @dev The agent must be able to administer its own splitter.
+     *
+     * Regression for a lock: the vault was the sole DEFAULT_ADMIN_ROLE holder
+     * and exposes no delegation, so nobody could ever grant or revoke a role on
+     * a splitter. That made `payout` permanent and left the agent unable to
+     * recover from a lost key, with its revenue accruing and unwithdrawable.
+     */
+    function test_AgentCanAdministerItsOwnSplitter() public {
+        splitter1 = _newSplitter(agent1);
+        assertTrue(splitter1.hasRole(splitter1.DEFAULT_ADMIN_ROLE(), agent1), "agent should be admin");
+
+        // The agent can rotate its own key. The role is read before the prank:
+        // a staticcall inside a prank scope consumes it, which is how the first
+        // version of this test sent grantRole as the test contract.
+        address replacement = address(0xB0B);
+        bytes32 agentRole = splitter1.AGENT_ROLE();
+        vm.prank(agent1);
+        splitter1.grantRole(agentRole, replacement);
+
+        // Give it something to withdraw, so the assertion is that the
+        // replacement key works rather than that the call does not revert on
+        // an empty balance.
+        _pay(splitter1, 50 * 1e6);
+        splitter1.settle();
+
+        vm.prank(replacement);
+        splitter1.withdraw();
+
+        assertEq(splitter1.getAgentOwed(), 0, "replacement key should have withdrawn");
+    }
+
+    function test_PayoutCanBeRedirectedByTheAgent() public {
+        splitter1 = _newSplitter(agent1);
+        address newPayout = address(0xB0B);
+
+        vm.prank(agent1);
+        splitter1.setPayout(newPayout);
+
+        assertEq(splitter1.payout(), newPayout);
+        assertTrue(splitter1.hasRole(splitter1.AGENT_ROLE(), agent1), "agent keeps its role");
+    }
+
+    function test_PayoutCannotBeRedirectedMidAdvance() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6);
+
+        vm.prank(agent1);
+        vm.expectRevert("Loan active: cannot change payout");
+        splitter1.setPayout(address(0xB0B));
+    }
+
+    function test_VaultRetainsAdminSoItCanCorrectAMisconfiguredPayout() public {
+        splitter1 = _newSplitter(agent1);
+        assertTrue(
+            splitter1.hasRole(splitter1.DEFAULT_ADMIN_ROLE(), address(vault)),
+            "the lender should still be able to redirect a bad payout"
+        );
+    }
 }

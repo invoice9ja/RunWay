@@ -1,15 +1,11 @@
 {
   "network": "arc-testnet",
   "chainId": 5042002,
-  "vault": "0xc9497Ec40951FbB98C02c666b7F9Fa143678E2Be",
-  "splitterImpl": "0xc880AF5d5aC3ea27c26C47D132661A710C245ea5",
-  "factory": "0x62F0bE8a94F7E348f15f6F373E35Ae5c34F7d40F",
-  "splitter": "0x06cebc9403c00d972e014e452509d04c7c350880",
+  "vault": "0x0f1a59fcab0638a1f3525d5acaedc5cbef4d95b7",
+  "splitterImpl": "0x73f05b740bbf1e55c7cc3f56ce5a20a04f0af6ee",
+  "factory": "0x0ed2b25c82f8a701f81c5182c0a5f3faf6e53c76",
+  "splitter": "0xe788d455223A6b5639D9140Ebf85fBE355424AB5",
   "usdc": "0x3600000000000000000000000000000000000000",
-  "admin": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
-  "underwriter": "0xe5A83d9efa7Be9dA6CAe31d533A60715407bF553",
-  "watcher": "0x9921130CDA8E78d111761e130e2BD7b22acDb292",
-  "timestamp": "2026-10-01T00:00:00.000Z",
   "explorer": "https://explorer.testnet.arc.io",
   "explorerKind": "blockscout",
   "status": "deployed_and_exercised",
@@ -18,68 +14,73 @@
     "factory": true,
     "splitterImpl": true
   },
+  "caps": {
+    "globalMaxUsdc": 10,
+    "starterCapUsdc": 0.5,
+    "maxPrincipalUsdc": 9.26,
+    "note": "GLOBAL_MAX bounds a single position, not the pool. deposit() does not check it. Because STARTER_CAP + 2 * lifetimeRevenue exceeds it, GLOBAL_MAX binds every advance here."
+  },
   "loans": {
-    "count": 4,
+    "count": 1,
     "allRepaid": true,
+    "principal": 5,
+    "totalDue": 5.4,
     "lenderShareBps": 3000,
-    "feeBps": 800,
-    "principals": [
-      10,
-      10,
-      12,
-      5
-    ],
-    "totalDue": [
-      10.8,
-      10.8,
-      12.96,
-      5.4
-    ]
+    "feeBps": 800
+  },
+  "roles": {
+    "admin": {
+      "address": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
+      "vaultRoles": [
+        "DEFAULT_ADMIN_ROLE"
+      ],
+      "splitterRoles": [],
+      "purpose": "deposit, withdraw free funds, pause, register splitters",
+      "note": "No longer the agent. Role rotation is the next step."
+    },
+    "underwriter": {
+      "address": "0xe5A83d9efa7Be9dA6CAe31d533A60715407bF553",
+      "vaultRoles": [
+        "UNDERWRITER_ROLE"
+      ],
+      "splitterRoles": [],
+      "purpose": "opens advances via openLoan"
+    },
+    "watcher": {
+      "address": "0x9921130CDA8E78d111761e130e2BD7b22acDb292",
+      "vaultRoles": [
+        "WATCHER_ROLE"
+      ],
+      "splitterRoles": [],
+      "purpose": "flags splitters via flagLoan"
+    },
+    "agent": {
+      "address": "0xC7F53Dc6e33A6a80c47845FAcEa64E8216531913",
+      "vaultRoles": [],
+      "splitterRoles": [
+        "DEFAULT_ADMIN_ROLE",
+        "AGENT_ROLE"
+      ],
+      "purpose": "owns the splitter, withdraws its revenue, administers its own contract",
+      "note": "DEFAULT_ADMIN_ROLE on the splitter is the fix: it makes the agent key recoverable and payout redirectable."
+    },
+    "payer": {
+      "address": "0xC7F53Dc6e33A6a80c47845FAcEa64E8216531913",
+      "vaultRoles": [],
+      "splitterRoles": [],
+      "purpose": "payout destination for the agent above; also the demo buyer",
+      "note": "Testnet only. In production payout and payer would be separate."
+    },
+    "settler": {
+      "address": "0x994203C52093B0558361878ca2688267610914E3",
+      "vaultRoles": [],
+      "purpose": "signs EIP-3009 payments in the hosted seller; holds a small float"
+    }
   },
   "notes": [
     "Everything here is Arc TESTNET. The contracts do not exist on Arc mainnet.",
     "The splitter is a minimal proxy clone of splitterImpl, deployed by the factory.",
-    "Roles are separated: admin, underwriter, watcher and settler are four distinct accounts.",
-    "The deployer is still the agent and the demo payer, which is a testnet shortcut.",
-    "Loan #3 was opened and repaid by the underwriter service on its own key, so the LoanOpened and Repaid events fall inside the indexer window and carry timestamps."
-  ],
-  "settler": "0x994203C52093B0558361878ca2688267610914E3",
-  "roles": {
-    "admin": {
-      "address": "0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C",
-      "roles": [
-        "DEFAULT_ADMIN_ROLE"
-      ],
-      "purpose": "deposit, withdraw free funds, pause, register splitters",
-      "note": "Also the agent and the demo payer. Testnet only."
-    },
-    "underwriter": {
-      "address": "0xe5A83d9efa7Be9dA6CAe31d533A60715407bF553",
-      "roles": [
-        "UNDERWRITER_ROLE"
-      ],
-      "purpose": "opens advances via openLoan",
-      "note": "Separated from the admin so a compromised scorer cannot move funds or pause the vault."
-    },
-    "watcher": {
-      "address": "0x9921130CDA8E78d111761e130e2BD7b22acDb292",
-      "roles": [
-        "WATCHER_ROLE"
-      ],
-      "purpose": "flags splitters via flagLoan",
-      "note": "Separated from the admin and from the underwriter so a flagger cannot originate credit."
-    },
-    "settler": {
-      "address": "0x994203C52093B0558361878ca2688267610914E3",
-      "roles": [],
-      "purpose": "signs EIP-3009 payments and routes receipts in the hosted seller",
-      "note": "No vault role. Holds a small float only."
-    }
-  },
-  "caps": {
-    "globalMaxUsdc": 10,
-    "starterCapUsdc": 0.5,
-    "note": "GLOBAL_MAX bounds a single position, not the pool. deposit() does not check it, so the vault can hold more than 10 USDC \u2014 42.56 at time of writing. Because STARTER_CAP + 2 * lifetimeRevenue is 238 USDC, GLOBAL_MAX is what binds every advance here.",
-    "maxPrincipalUsdc": 9.26
-  }
+    "This is the second deployment. The first (vault 0xc9497Ec4) had a splitter-admin lock where nobody could grant or revoke a role on a splitter, fixing it required a contract change, and it is superseded.",
+    "The agent holds DEFAULT_ADMIN_ROLE on its own splitter so a lost key is recoverable and payout can be redirected."
+  ]
 }
