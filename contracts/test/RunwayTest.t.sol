@@ -621,4 +621,75 @@ contract RunwayTest is Test {
             "the lender should still be able to redirect a bad payout"
         );
     }
+
+    // -----------------------------------------------------------------------
+    // repay authority
+    //
+    // repay() credits debt without moving tokens: settle() calls it and then
+    // transfers the USDC itself. So the vault has to prove the caller is the
+    // splitter that owes the money. If it does not, anyone can mark a loan
+    // repaid for free, which shrinks the debt the vault is owed, inflates
+    // availableToWithdraw, and lets the admin drain USDC that was never repaid.
+    // It also lets an outsider shrink `owed` so the next settle() routes the
+    // lender's 30% share to the agent instead.
+    // -----------------------------------------------------------------------
+
+    function test_RepayRejectsCallerThatIsNotTheSplitter() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6);
+        uint256 owedBefore = vault.advanceOutstanding(address(splitter1));
+        assertGt(owedBefore, 0, "loan should be outstanding");
+
+        vm.prank(address(0xB0B));
+        vm.expectRevert();
+        vault.repay(address(splitter1), 100 * 1e6);
+
+        assertEq(vault.advanceOutstanding(address(splitter1)), owedBefore, "a rejected repay must not credit any debt");
+    }
+
+    function test_RepayRejectsAdminAndUnderwriterToo() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6);
+        uint256 owedBefore = vault.advanceOutstanding(address(splitter1));
+
+        // The admin can already withdraw free funds; being able to also erase
+        // debt would turn every repayment into a withdrawal.
+        vm.prank(admin);
+        vm.expectRevert();
+        vault.repay(address(splitter1), 100 * 1e6);
+
+        vm.prank(underwriter);
+        vm.expectRevert();
+        vault.repay(address(splitter1), 100 * 1e6);
+
+        assertEq(vault.advanceOutstanding(address(splitter1)), owedBefore);
+    }
+
+    function test_RepayCannotBeUsedToInflateFreeFunds() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6);
+
+        uint256 freeBefore = vault.availableToWithdraw();
+        uint256 owed = vault.advanceOutstanding(address(splitter1));
+        assertGt(owed, 0);
+
+        vm.prank(address(0xB0B));
+        vm.expectRevert();
+        vault.repay(address(splitter1), owed);
+
+        assertEq(vault.availableToWithdraw(), freeBefore, "free funds must not move without a real repayment");
+    }
+
+    function test_SettleStillWorksAfterTighteningRepay() public {
+        splitter1 = _newSplitter(agent1);
+        _openLoan(splitter1, 100 * 1e6);
+        _pay(splitter1, 300 * 1e6);
+
+        // settle() calls repay as the splitter itself, which must still work.
+        splitter1.settle();
+
+        uint256 owed = vault.advanceOutstanding(address(splitter1));
+        uint256 expected = 100 * 1e6 + (100 * 1e6 * 800) / 10000 - (300 * 1e6 * 3000) / 10000;
+        assertLe(owed, expected, "settlement should have credited the lender its share");
+    }
 }

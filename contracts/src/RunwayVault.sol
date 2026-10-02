@@ -170,12 +170,16 @@ contract RunwayVault is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Apply a repayment from a splitter's settle().
-     * @dev Splitters hold SPLITTER_ROLE by construction; the mapping is the
-     *      authority check. Returns the amount actually applied so the caller can
-     *      return any excess to the agent instead of stranding it.
+     * @dev This credits debt only: the caller is expected to transfer the USDC, which
+     *      settle() does immediately after this returns. That split makes the caller
+     *      check load-bearing, not defensive. Without it anyone can call repay() on a
+     *      registered splitter, erase its debt for free, inflate availableToWithdraw,
+     *      and shrink `owed` so the next settle routes the lender's share to the agent.
+     *      Only the splitter named in the argument may credit against its own loan.
      * @return applied Amount credited against the outstanding balance
      */
     function repay(address splitter, uint256 amount) external nonReentrant returns (uint256 applied) {
+        require(msg.sender == splitter, "Repay caller is not the splitter");
         require(isSplitter[splitter], "Unknown splitter");
         require(amount > 0, "Zero repayment");
 
