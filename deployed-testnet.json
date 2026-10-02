@@ -19,16 +19,29 @@
     "splitterImpl": true
   },
   "loans": {
-    "count": 3,
+    "count": 4,
     "allRepaid": true,
     "lenderShareBps": 3000,
-    "feeBps": 800
+    "feeBps": 800,
+    "principals": [
+      10,
+      10,
+      12,
+      5
+    ],
+    "totalDue": [
+      10.8,
+      10.8,
+      12.96,
+      5.4
+    ]
   },
   "notes": [
     "Everything here is Arc TESTNET. The contracts do not exist on Arc mainnet.",
     "The splitter is a minimal proxy clone of splitterImpl, deployed by the factory.",
     "Roles are separated: admin, underwriter, watcher and settler are four distinct accounts.",
-    "The deployer is still the agent and the demo payer, which is a testnet shortcut."
+    "The deployer is still the agent and the demo payer, which is a testnet shortcut.",
+    "Loan #3 was opened and repaid by the underwriter service on its own key, so the LoanOpened and Repaid events fall inside the indexer window and carry timestamps."
   ],
   "settler": "0x994203C52093B0558361878ca2688267610914E3",
   "roles": {
@@ -62,5 +75,11 @@
       "purpose": "signs EIP-3009 payments and routes receipts in the hosted seller",
       "note": "No vault role. Holds a small float only."
     }
+  },
+  "caps": {
+    "globalMaxUsdc": 10,
+    "starterCapUsdc": 0.5,
+    "note": "GLOBAL_MAX bounds a single position, not the pool. deposit() does not check it, so the vault can hold more than 10 USDC \u2014 42.56 at time of writing. Because STARTER_CAP + 2 * lifetimeRevenue is 238 USDC, GLOBAL_MAX is what binds every advance here.",
+    "maxPrincipalUsdc": 9.26
   }
 }
