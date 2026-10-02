@@ -78,5 +78,6 @@
     "Second abandoned splitter (0x8C24a83a) belongs to the current agent but points at the superseded vault. Unused; the vault it targets is retired.",
     "First vault (0xc9497Ec4) is also superseded.",
     "Each role uses a distinct key. Only the deployer administers the vault; the agent administers its own splitter."
-  ]
+  ],
+  "verificationNote": "Unverified. Blockscout at explorer.testnet.arc.io rejects verification without ARC_EXPLORER_API_KEY, which is empty in .env. Set it, or submit through the web UI, then flip these to true."
 }
