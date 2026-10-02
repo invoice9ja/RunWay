@@ -1,67 +1,119 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Demo Buyer - exercises the real x402 path against the hosted seller.
+#
+# Flow: request the resource -> receive a 402 with payment requirements ->
+# sign an EIP-3009 authorization -> the facilitator settles it on-chain and
+# forwards USDC to the agent's splitter.
+#
+# The earlier version of this script was hardcoded to Base Sepolia against an
+# abandoned splitter and simply transferred USDC, which is not x402 and proved
+# nothing. This one drives the real endpoint.
+#
+# Run: ./scripts/demo-buyer.sh [amount_usdc]
 
-# Demo Buyer - Generates x402 payments to the splitter
-# Run: ./demo-buyer.sh
+set -euo pipefail
 
-set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-runway-config.sh
+. "$SCRIPT_DIR/lib-runway-config.sh"
 
-# Never hardcode a key. Load it from the environment or an untracked .env.
-if [ -z "${RUNWAY_PRIVATE_KEY:-}" ] && [ -f "$(dirname "$0")/../.env" ]; then
-  set -a; . "$(dirname "$0")/../.env"; set +a
+PRICE="${RUNWAY_DEMO_PRICE:-100000}"
+
+# Pass settle=0 to leave the payment unsettled so scripts/keeper.sh can route it.
+SETTLE="${SETTLE:-1}"
+
+echo "Demo Buyer (x402)"
+banner
+
+echo "Fetching payment requirements from $RUNWAY_URL/api/demo/sell"
+echo
+
+# The 402 carries the payment requirements. Save headers and body separately so
+# the challenge can be inspected without hiding a failure behind curl's output.
+HDR=$(mktemp); BODY=$(mktemp)
+trap 'rm -f "$HDR" "$BODY"' EXIT
+
+STATUS=$(curl -sS -D "$HDR" -o "$BODY" -w '%{http_code}' \
+  -H "Accept: application/json" \
+  "$RUNWAY_URL/api/demo/sell" || true)
+
+if [ "$STATUS" != "402" ]; then
+  echo "Expected HTTP 402 from the seller, got $STATUS." >&2
+  echo "The x402 challenge is the whole point of this script; something is wrong." >&2
+  echo "--- response ---" >&2
+  head -c 600 "$BODY" >&2
+  echo >&2
+  exit 1
 fi
-: "${RUNWAY_PRIVATE_KEY:?Set RUNWAY_PRIVATE_KEY (or add it to .env) before running this script}"
 
-RPC_URL="https://sepolia.base.org"
-PRIVATE_KEY="${RUNWAY_PRIVATE_KEY:-}"
-SPLITTER_ADDRESS="0x96030e714e14b848445b40dfc327d828a3f474f6"
-USDC_ADDRESS="0x036CbD53842c5426634e7929541eC2318f3dCF7e"
-PAYMENT_AMOUNT=100000  # 0.1 USDC (6 decimals)
-INTERVAL=60  # seconds between payments
+echo "  HTTP $STATUS as expected"
+echo
+echo "Challenge:"
+python3 - "$BODY" <<'PY'
+import json, sys
+with open(sys.argv[1]) as fh:
+    doc = json.load(fh)
+accepts = (doc.get('accepts') or [{}])[0]
+for label, key in (
+    ('resource', 'resource'), ('network', 'network'), ('asset', 'asset'),
+    ('max amount', 'maxAmountRequired'), ('mime', 'mimeType'),
+    ('payTo', 'payTo'), ('maxTimeout', 'maxTimeoutSeconds'),
+):
+    value = accepts.get(key)
+    if value not in (None, ''):
+        print(f'  {label:12} {value}')
+PY
+echo
 
-echo "Starting Demo Buyer"
-echo "Splitter: $SPLITTER_ADDRESS"
-echo "Payment amount: $PAYMENT_AMOUNT USDC (6 decimals) = $(echo "scale=6; $PAYMENT_AMOUNT / 1000000" | bc) USDC"
-echo "Interval: ${INTERVAL}s"
-echo ""
+# Settling needs a funded payer. The hosted /api/demo/buy does the signing and
+# submission server-side using the configured settler key.
+require_key RUNWAY_KEEPER_SECRET "It authorises /api/demo/buy."
+require_key RUNWAY_PRIVATE_KEY "It signs the EIP-3009 authorization."
 
-# Check USDC balance
-BALANCE_RAW=$(cast call $USDC_ADDRESS "balanceOf(address)" $SPLITTER_ADDRESS --rpc-url https://sepolia.base.org 2>/dev/null)
-BALANCE=$(cast --to-dec $BALANCE_RAW)
-echo "Splitter USDC balance: $(echo "scale=6; $BALANCE / 1000000" | bc) USDC"
+BUYER=$(cast wallet address --private-key "$RUNWAY_PRIVATE_KEY")
+BAL_RAW=$(cast call "$USDC" "balanceOf(address)" "$BUYER" --rpc-url "$RPC_URL" | strip)
+echo "Payer $BUYER holds $(usdc_fmt "$BAL_RAW") USDC"
+echo
 
-# Check buyer USDC balance
-BUYER_BALANCE_RAW=$(cast call $USDC_ADDRESS "balanceOf(address)" 0xe81e8078f2D284C92D6d97B5d4769af81e0cA11C --rpc-url https://sepolia.base.org 2>/dev/null)
-BUYER_BALANCE=$(cast --to-dec $BUYER_BALANCE_RAW)
-echo "Buyer USDC balance: $(echo "scale=6; $BUYER_BALANCE / 1000000" | bc) USDC"
+if [ "$BAL_RAW" = "0" ]; then
+  echo "Payer has no USDC. Fund it on Arc testnet first." >&2
+  exit 1
+fi
 
-# Approve USDC for direct transfer (if needed)
-# For demo, we just transfer USDC directly to splitter
-# In real x402, the facilitator handles this
+echo "Requesting settlement from $RUNWAY_URL/api/demo/buy"
+RESULT=$(curl -sS -X POST -H "Authorization: Bearer $RUNWAY_KEEPER_SECRET" \
+  -H "Content-Type: application/json" \
+  -d "{\"amount\":\"$PRICE\"}" \
+  "$RUNWAY_URL/api/demo/buy?settle=$SETTLE" || true)
 
-make_payment() {
-  echo ""
-  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Making payment of $PAYMENT_AMOUNT USDC to splitter..."
-  
-  # Transfer USDC to splitter (simulating facilitator payment)
-  TX_HASH=$(cast send $USDC_ADDRESS "transfer(address,uint256)" $SPLITTER_ADDRESS $PAYMENT_AMOUNT --private-key $PRIVATE_KEY --rpc-url https://sepolia.base.org 2>&1 | grep "transactionHash" | head -1)
-  
-  if [ -n "$TX_HASH" ]; then
-    echo "✓ Payment sent: $TX_HASH"
-    
-    # Check splitter balance after payment
-    BALANCE_RAW=$(cast call $USDC_ADDRESS "balanceOf(address)" $SPLITTER_ADDRESS --rpc-url https://sepolia.base.org 2>/dev/null)
-    BALANCE=$(cast --to-dec $BALANCE_RAW)
-    echo "Splitter balance: $(echo "scale=6; $BALANCE / 1000000" | bc) USDC"
-  else
-    echo "✗ Payment failed"
-  fi
-}
+echo
+python3 - "$RESULT" <<'PY'
+import json, sys
+raw = sys.argv[1]
+try:
+    doc = json.loads(raw)
+except Exception:
+    print('  non-JSON response:', raw[:400]); raise SystemExit(1)
+if doc.get('error'):
+    print('  error:', doc['error'])
+    for k in ('detail', 'reason'):
+        if doc.get(k): print(f'  {k}:', str(doc[k])[:300])
+    raise SystemExit(1)
+for key in ('ok', 'paid', 'payer', 'payTo', 'amount', 'settled', 'txHash', 'splitter'):
+    if key in doc:
+        print(f'  {key:9} {doc[key]}')
+PY
 
-# Run immediately
-make_payment
-
-# Then run on interval
-while true; do
-  sleep 60
-  make_payment
-done
+echo
+echo "Splitter balance after payment:"
+BAL_RAW=$(cast call "$USDC" "balanceOf(address)" "$SPLITTER" --rpc-url "$RPC_URL" | strip)
+echo "  $SPLITTER  $(usdc_fmt "$BAL_RAW") USDC"
+UNSETTLED=$(cast call "$SPLITTER" "getUnsettledRevenue()(uint256)" --rpc-url "$RPC_URL" | strip)
+echo "  unsettled  $(usdc_fmt "$UNSETTLED") USDC"
+echo
+if [ "$SETTLE" = "0" ]; then
+  echo "Left unsettled (settle=0). Run scripts/keeper.sh to route it to the vault."
+else
+  echo "Settled automatically by /api/demo/buy: the vault and the agent split it."
+  echo "Run SETTLE=0 ./scripts/demo-buyer.sh to exercise the keeper instead."
+fi
