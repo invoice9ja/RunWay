@@ -70,22 +70,49 @@ function formatUsdc(value: bigint): string {
 }
 
 /**
+ * Resolve the chain from configuration rather than hardcoding testnet, and
+ * verify the RPC actually serves it.
+ */
+type ChainConfig = { chainId: number; name: string };
+
+function resolveChain(): ChainConfig {
+  const chainId = Number(process.env.RUNWAY_CHAIN_ID || 5042002);
+  if (!Number.isInteger(chainId) || chainId <= 0) {
+    throw new Error(`RUNWAY_CHAIN_ID is not a valid chain id: ${process.env.RUNWAY_CHAIN_ID}`);
+  }
+  const name = process.env.RUNWAY_NETWORK || (chainId === 5042002 ? "arc-testnet" : "arc-mainnet");
+  return { chainId, name };
+}
+
+/**
  * Pinning the chain skips ethers' network detection, which times out on the
  * public Arc endpoint often enough to make a read look like a hard failure.
  */
-const ARC_TESTNET = { chainId: 5042002, name: "arc-testnet" };
+const CHAIN = resolveChain();
 
-function providerFor(rpcUrl: string): ethers.JsonRpcProvider {
-  return new ethers.JsonRpcProvider(rpcUrl, ARC_TESTNET, {
+async function providerFor(rpcUrl: string): Promise<ethers.JsonRpcProvider> {
+  const provider = new ethers.JsonRpcProvider(rpcUrl, CHAIN, {
     staticNetwork: true,
     batchMaxCount: 1,
   });
+  // Ask the node directly. `getNetwork()` is useless for this because
+  // staticNetwork makes ethers return the pinned value, so comparing it against
+  // CHAIN always matches. Raw eth_chainId is the only honest source.
+  const actual = Number(await provider.send("eth_chainId", []));
+  if (actual !== CHAIN.chainId) {
+    throw new Error(
+      `RPC serves chain ${actual} but RUNWAY_CHAIN_ID is ${CHAIN.chainId}. ` +
+        `Check RUNWAY_CHAIN_ID and the RPC URL before flagging anything.`,
+    );
+  }
+  return provider;
 }
 
 async function main() {
-  const network = process.env.NETWORK || "testnet";
-  const rpcUrl = process.env.ARC_TESTNET_RPC;
-  if (!rpcUrl) throw new Error("ARC_TESTNET_RPC is not configured");
+  const network = CHAIN.name;
+  // Accept either variable so one config works on both chains.
+  const rpcUrl = process.env.RUNWAY_RPC_URL || process.env.ARC_TESTNET_RPC;
+  if (!rpcUrl) throw new Error("RUNWAY_RPC_URL (or ARC_TESTNET_RPC) is not configured");
 
   const intervalMs = parseInt(process.env.WATCHER_INTERVAL_MS || "60000", 10);
   /**
@@ -105,7 +132,7 @@ async function main() {
       .filter(Boolean),
   );
 
-  const provider = providerFor(rpcUrl);
+  const provider = await providerFor(rpcUrl);
 
   // Fail loudly and specifically. A non-null assertion here turns a missing key
   // into an opaque ethers error deep in a wallet constructor, or worse, a wallet
