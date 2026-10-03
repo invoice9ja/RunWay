@@ -405,17 +405,30 @@ async function main() {
     console.log(`  rationaleHash: ${rationaleHash}`);
   }
 
-  const target = process.env.UNDERWRITER_SPLITTER;
-  if (!target) {
-    console.log("");
-    console.log("Set UNDERWRITER_SPLITTER to score one splitter, or pass it as the first argument.");
-    console.log("Nothing was scored.");
-    return;
-  }
+// Accept a splitter as the first CLI argument, or fall back to the environment.
+// The help text promised this argument, but only the env var was ever read, so
+// passing an address appeared to do nothing.
+const argTarget = process.argv[2];
+if (argTarget && !argTarget.startsWith("--") && !ethers.isAddress(argTarget)) {
+  throw new Error(
+    `argument "${argTarget}" is not a contract address. Pass a 0x-prefixed address, or use --help.`,
+  );
+}
 
-  if (!(await vault.isSplitter(target))) {
-    throw new Error(`${target} is not a registered splitter`);
-  }
+const target = argTarget || process.env.UNDERWRITER_SPLITTER;
+if (!target) {
+  console.log("");
+  console.log("Usage: node dist/index.js <splitter-address>");
+  console.log("Or set UNDERWRITER_SPLITTER in the environment.");
+  console.log("");
+  console.log("Nothing was scored. Registered splitters can be listed with:");
+  console.log("  ./scripts/keeper.sh --dry-run");
+  return;
+}
+
+if (!(await vault.isSplitter(target))) {
+  throw new Error(`${target} is not a registered splitter`);
+}
 
   const { metrics, verdict } = await evaluate(target);
   report(target, metrics, verdict);
