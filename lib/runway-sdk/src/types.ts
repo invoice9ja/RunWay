@@ -262,6 +262,14 @@ export const settleAbi = [{
   outputs: [],
 }] as const satisfies Abi;
 
+export const withdrawAbi = [{
+  type: 'function',
+  name: 'withdraw',
+  stateMutability: 'nonpayable',
+  inputs: [],
+  outputs: [],
+}] as const satisfies Abi;
+
 export const openLoanAbi = [{
   type: 'function',
   name: 'openLoan',

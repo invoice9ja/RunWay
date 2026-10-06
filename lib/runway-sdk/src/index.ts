@@ -20,6 +20,7 @@ export {
   getVaultStatus,
   requestAdvance,
   settle,
+  withdraw,
   formatUsdc,
   usdc,
   splitSignature,
@@ -48,7 +49,7 @@ export {
   type PaymentRequirements,
 } from './types.js';
 
-export { erc20Abi, splitterAbi, vaultAbi, factoryAbi, approveAbi } from './types.js';
+export { erc20Abi, splitterAbi, vaultAbi, factoryAbi, approveAbi, withdrawAbi } from './types.js';
 
 /** Re-exported so callers do not need a direct viem dependency for addresses. */
 export type { Address } from 'viem';

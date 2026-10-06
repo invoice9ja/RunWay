@@ -36,6 +36,7 @@ import {
   totalOutstandingAbi,
   loansLengthAbi,
   settleAbi,
+  withdrawAbi,
   splitterCreatedEvent,
   transferAbi,
   transferWithAuthorizationAbi,
@@ -451,6 +452,25 @@ export async function settle(runway: RunwayClient, splitter: Address) {
     address: splitter,
     abi: settleAbi,
     functionName: 'settle',
+  });
+  const receipt = await runway.publicClient.waitForTransactionReceipt({ hash });
+  return { hash, explorer: runway.explorerTx(hash), receipt };
+}
+
+/**
+ * Claim everything the splitter owes the agent: earned revenue first, then any
+ * unspent working capital from an advance.
+ *
+ * `withdraw()` pulls the whole owed amount and sends it to the splitter's
+ * `payout` address, so the caller must hold the splitter's AGENT_ROLE. There is
+ * no amount argument on-chain - the splitter decides what is claimable.
+ */
+export async function withdraw(runway: RunwayClient, splitter: Address) {
+  requireWallet(runway);
+  const hash = await write(runway, {
+    address: splitter,
+    abi: withdrawAbi,
+    functionName: 'withdraw',
   });
   const receipt = await runway.publicClient.waitForTransactionReceipt({ hash });
   return { hash, explorer: runway.explorerTx(hash), receipt };
