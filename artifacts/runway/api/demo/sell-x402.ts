@@ -17,7 +17,11 @@ const PRICE = 100_000n; // 0.1 USDC
 const handler: Handler = async (req, res) => {
   const origin = baseUrl(req);
 
-  res.setHeader('Cache-Control', 'public, max-age=60');
+  // An authorization cost must not be cached: the buyer derives the payment
+  // address, token, EIP-712 domain, and price from this response. Serving a
+  // stale copy after a redeploy would make the page approve and sign against
+  // addresses that are no longer live.
+  res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     x402Version: 1,
     error: 'Payment required',

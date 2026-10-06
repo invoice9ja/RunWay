@@ -136,7 +136,7 @@ export function PayPage() {
   // repoint the deployment and the page would approve the old splitter and pay
   // the new one, or approve an allowance nothing could use.
   useEffect(() => {
-    fetch('/api/demo/sell-x402')
+    fetch('/api/demo/sell-x402', { cache: 'no-store' })
       .then((response) => response.json())
       .then(
         (challenge: { accepts?: { maxAmountRequired: string; payTo?: string; asset?: string }[] }) => {
