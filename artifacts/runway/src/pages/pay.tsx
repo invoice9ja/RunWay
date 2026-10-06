@@ -149,6 +149,51 @@ export function PayPage() {
       .catch(() => undefined);
   }, []);
 
+  // Keeps the page honest about the session: MetaMask revoking the site's
+  // connection or switching accounts does not ask us anything, it just fires
+  // events. Without these listeners the flow kept showing a "connected" state
+  // long after the wallet was gone, so a fresh connect or the wrong account
+  // went unnoticed. On disconnect (or active-account change) we drop the
+  // session and surface the connect prompt again.
+  useEffect(() => {
+    if (!wallet) return;
+    const provider = wallet.provider;
+
+    const drop = () => {
+      setWallet(null);
+      setUsdc(null);
+      setNative(null);
+      setAllowance(null);
+      setResource(null);
+      setStages(STAGES.map((s) => ({ ...s, state: 'pending' })));
+      setError('Wallet disconnected. Connect again to continue.');
+    };
+
+    const onAccountsChanged = (accounts: unknown) => {
+      const list = accounts as string[];
+      if (!list || list.length === 0) return drop();
+      // A different account is now active; require a deliberate reconnect so the
+      // balances and allowances shown always belong to the connected address.
+      if (list[0].toLowerCase() !== wallet.address.toLowerCase()) return drop();
+    };
+
+    const onChainChanged = (chain: unknown) => {
+      const parsed = Number.parseInt(String(chain), 16);
+      setWallet((current) => (current ? { ...current, chainId: parsed } : current));
+    };
+
+    const onDisconnect = () => drop();
+
+    provider.on('accountsChanged', onAccountsChanged);
+    provider.on('chainChanged', onChainChanged);
+    provider.on('disconnect', onDisconnect);
+    return () => {
+      provider.removeListener('accountsChanged', onAccountsChanged);
+      provider.removeListener('chainChanged', onChainChanged);
+      provider.removeListener('disconnect', onDisconnect);
+    };
+  }, [wallet]);
+
   // Plain function, deliberately not memoized: it reads `payTo` and `asset`,
   // which arrive asynchronously from the challenge after the first render. A
   // useCallback with empty deps froze those references from the first render,
