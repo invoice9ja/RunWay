@@ -149,7 +149,13 @@ export function PayPage() {
       .catch(() => undefined);
   }, []);
 
-  const readBalances = useCallback(async (target: ConnectedWallet) => {
+  // Plain function, deliberately not memoized: it reads `payTo` and `asset`,
+  // which arrive asynchronously from the challenge after the first render. A
+  // useCallback with empty deps froze those references from the first render,
+  // so every allowance read hit the sentinel zero address instead of the
+  // splitter - the approval looked like it never landed and the flow deadlocked
+  // on approving over and over.
+  async function readBalances(target: ConnectedWallet) {
     const [token, gas, allowed] = await Promise.all([
       getUsdcBalance(target, asset ?? undefined),
       getNativeBalance(target),
@@ -158,7 +164,7 @@ export function PayPage() {
     setUsdc(token);
     setNative(gas);
     setAllowance(allowed);
-  }, []);
+  }
 
   const doConnect = async () => {
     setError(null);
