@@ -26,10 +26,28 @@ import { randomBytes } from 'node:crypto';
  */
 
 const PUBLIC_MAX_AMOUNT = 100_000n; // 0.1 USDC
-const PUBLIC_COOLDOWN_MS = 30_000;
+/**
+ * Per-payer, not global. The old single-instance cooldown blocked the *next*
+ * payment from the same human (and even the free price-discovery read), which
+ * made consecutive test payments impossible. Rotation still can't exhaust the
+ * operator wallet: the daily volume cap and the WALLET_FLOOR check bound the
+ * real cost regardless of how fast distinct wallets arrive.
+ */
+const PUBLIC_COOLDOWN_MS = 5_000;
 const WALLET_FLOOR = 500_000n; // 0.5 USDC
 
-let lastPublicRun = 0;
+const lastPaidBy = new Map<string, number>();
+
+/** Best-effort payer in a payment header; 'unknown' when undecodable. */
+function payerOf(rawPayment: string): string {
+  try {
+    const payload = decodeHeader<PaymentPayload>(rawPayment);
+    const from = payload?.payload?.authorization?.from;
+    return from ? from.toLowerCase() : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 const amount = (value: bigint) => ({
   raw: value.toString(),
@@ -69,16 +87,11 @@ const handler: Handler = async (req, res) => {
   const authenticated = isAuthorized(req);
   if (!authenticated) {
     price = price > PUBLIC_MAX_AMOUNT ? PUBLIC_MAX_AMOUNT : price;
-    if (Date.now() - lastPublicRun < PUBLIC_COOLDOWN_MS) {
-      res.status(429).json({
-        error: `Seller throttle: one payment every ${PUBLIC_COOLDOWN_MS / 1000}s.`,
-        retryAfterMs: PUBLIC_COOLDOWN_MS - (Date.now() - lastPublicRun),
-      });
-      return;
-    }
   }
 
-  // Discovery, so a client can price a call before paying.
+  // Discovery and the unpaid 402 challenge are free: they cost the protocol no
+  // gas, so they are never throttled. Only a request that actually pays settles
+  // the splitter, and only those are rate-limited.
   if (req.url?.includes('/.well-known/x402')) {
     res.status(200).json(challenge(resource, price));
     return;
@@ -102,7 +115,19 @@ const handler: Handler = async (req, res) => {
     return;
   }
 
-  if (!authenticated) lastPublicRun = Date.now();
+  if (!authenticated) {
+    const payer = payerOf(rawPayment);
+    const since = lastPaidBy.get(payer) ?? 0;
+    const wait = Date.now() - since;
+    if (wait < PUBLIC_COOLDOWN_MS) {
+      res.status(429).json({
+        error: `Demo throttle: one payment every ${PUBLIC_COOLDOWN_MS / 1000}s per wallet.`,
+        retryAfterMs: PUBLIC_COOLDOWN_MS - wait,
+      });
+      return;
+    }
+    lastPaidBy.set(payer, Date.now());
+  }
 
   let payment: PaymentPayload;
   try {
@@ -151,20 +176,29 @@ const handler: Handler = async (req, res) => {
     return;
   }
 
-  const recovered = await recoverTypedDataAddress({
-    domain: usdcDomain(),
-    types: transferWithAuthorizationTypes,
-    primaryType: 'TransferWithAuthorization',
-    message: {
-      from: authorization.from,
-      to: authorization.to,
-      value,
-      validAfter,
-      validBefore,
-      nonce: authorization.nonce,
-    },
-    signature,
-  });
+  // A malformed signature throws in viem rather than returning a recovered
+  // address, and an unhandled throw surfaces as a 500 to the buyer. Turn that
+  // into an explicit unpayable reject instead.
+  let recovered: `0x${string}`;
+  try {
+    recovered = await recoverTypedDataAddress({
+      domain: usdcDomain(),
+      types: transferWithAuthorizationTypes,
+      primaryType: 'TransferWithAuthorization',
+      message: {
+        from: authorization.from,
+        to: authorization.to,
+        value,
+        validAfter,
+        validBefore,
+        nonce: authorization.nonce,
+      },
+      signature,
+    });
+  } catch {
+    res.status(401).json({ error: 'Signature is malformed' });
+    return;
+  }
   if (recovered.toLowerCase() !== authorization.from.toLowerCase()) {
     res.status(401).json({ error: 'Signature does not match the authorizing payer' });
     return;

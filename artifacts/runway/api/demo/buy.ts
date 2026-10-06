@@ -31,7 +31,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Unauthenticated (dashboard) calls are throttled and volume-capped. */
 const PUBLIC_MAX_AMOUNT = 100_000n; // 0.1 USDC
-const PUBLIC_COOLDOWN_MS = 30_000;
+/** Per-account (the hosted buyer always pays from the operational wallet). */
+const PUBLIC_COOLDOWN_MS = 5_000;
 const PUBLIC_DAILY_CAP = 1_000_000n; // 1 USDC per UTC day
 /**
  * The buyer and the seller are the same operational account, so every dashboard
@@ -41,7 +42,7 @@ const PUBLIC_DAILY_CAP = 1_000_000n; // 1 USDC per UTC day
  */
 const WALLET_FLOOR = 500_000n; // 0.5 USDC
 
-let lastPublicRun = 0;
+const lastBuyBy = new Map<string, number>();
 let publicVolume = 0n;
 let publicVolumeDay = new Date().getUTCDate();
 
@@ -88,6 +89,13 @@ const handler: Handler = async (req, res) => {
     return;
   }
 
+  const account = getAccount();
+  if (!account) {
+    res.status(500).json({ error: 'RUNWAY_PRIVATE_KEY is not configured' });
+    return;
+  }
+  const payer = account.address.toLowerCase();
+
   const authenticated = isAuthorized(req);
   const today = new Date().getUTCDate();
   if (today !== publicVolumeDay) {
@@ -95,9 +103,12 @@ const handler: Handler = async (req, res) => {
     publicVolume = 0n;
   }
   if (!authenticated) {
-    if (Date.now() - lastPublicRun < PUBLIC_COOLDOWN_MS) {
+    const since = lastBuyBy.get(payer) ?? 0;
+    const wait = Date.now() - since;
+    if (wait < PUBLIC_COOLDOWN_MS) {
       res.status(429).json({
-        error: `Demo throttle: one payment every ${PUBLIC_COOLDOWN_MS / 1000}s from the dashboard.`,
+        error: `Demo throttle: one payment every ${PUBLIC_COOLDOWN_MS / 1000}s per wallet.`,
+        retryAfterMs: PUBLIC_COOLDOWN_MS - wait,
       });
       return;
     }
@@ -107,12 +118,7 @@ const handler: Handler = async (req, res) => {
       });
       return;
     }
-  }
-
-  const account = getAccount();
-  if (!account) {
-    res.status(500).json({ error: 'RUNWAY_PRIVATE_KEY is not configured' });
-    return;
+    lastBuyBy.set(payer, Date.now());
   }
 
   const steps: Step[] = [];
@@ -128,7 +134,6 @@ const handler: Handler = async (req, res) => {
   if (!authenticated && requestedAmount > PUBLIC_MAX_AMOUNT) {
     requestedAmount = PUBLIC_MAX_AMOUNT;
   }
-  if (authenticated) lastPublicRun = Date.now();
 
   const resourceUrl = `${origin}/api/x402/resource?amount=${requestedAmount}`;
 
@@ -325,7 +330,6 @@ const handler: Handler = async (req, res) => {
     );
 
     if (!authenticated) {
-      lastPublicRun = Date.now();
       publicVolume += amount;
     }
 
