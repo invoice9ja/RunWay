@@ -33,6 +33,15 @@ export const config = {
     'RUNWAY_SPLITTER_ADDRESS',
     '0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279',
   ),
+  /**
+   * Clone target the factory copies from. Not a live splitter, and it holds no
+   * funds. Surfaced so the dashboard can show the whole deployment rather than
+   * hardcoding an address that drifts out of date.
+   */
+  splitterImpl: readAddress(
+    'RUNWAY_SPLITTER_IMPL_ADDRESS',
+    '0x8e0898723c4dd84271b3f307c137a344f69009e8',
+  ),
 
   /**
    * Role holders, for read-only simulation only. These are addresses, never

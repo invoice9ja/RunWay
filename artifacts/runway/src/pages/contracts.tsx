@@ -3,29 +3,31 @@ import { Check, RotateCcw, Save } from 'lucide-react';
 
 import { PageFooter, PageHeader } from '@/components/app-shell';
 import { Section } from '@/components/section';
-
-const DEPLOYED = {
-  vault: '0x30f5f5d45bbf94487fa3cae069d5bdaadb6744ab',
-  factory: '0xc8f5ae45cfbc7a9f17248fd610adc989f8d08106',
-  splitter: '0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279',
-  splitterImpl: '0xc880AF5d5aC3ea27c26C47D132661A710C245ea5',
-  usdc: '0x3600000000000000000000000000000000000000',
-  explorer: 'https://explorer.testnet.arc.io',
-};
+import { useChainStatus } from '@/lib/chain-status';
 
 type Config = { vault: string; factory: string };
 
+/**
+ * The local override is browser-only and must never masquerade as the real
+ * deployment, so it starts empty and only ever reads back what this browser
+ * saved. There are no built-in defaults here: the deployed addresses come from
+ * /api/status, which reads the same config the API and services use. Hardcoding
+ * them in this file is what let the page advertise a splitter implementation
+ * from a retired deployment while the rest of the app talked to the current one.
+ */
 function readConfig(): Config {
   try {
     const saved = localStorage.getItem('runway-contract-config');
     if (saved) return JSON.parse(saved) as Config;
   } catch {
-    /* fall through to the deployed defaults */
+    /* fall through to no override */
   }
-  return { vault: DEPLOYED.vault, factory: DEPLOYED.factory };
+  return { vault: '', factory: '' };
 }
 
 export function ContractsPage() {
+  const { data, loading } = useChainStatus();
+  const deployed = data?.contracts;
   const [saved, setSaved] = useState<Config>(readConfig);
   const [draft, setDraft] = useState<Config>(readConfig);
   const [errors, setErrors] = useState<Partial<Record<keyof Config, string>>>({});
@@ -54,29 +56,39 @@ export function ContractsPage() {
 
   const reset = () => {
     localStorage.removeItem('runway-contract-config');
-    setSaved({ vault: DEPLOYED.vault, factory: DEPLOYED.factory });
-    setDraft({ vault: DEPLOYED.vault, factory: DEPLOYED.factory });
+    setSaved({ vault: '', factory: '' });
+    setDraft({ vault: '', factory: '' });
     setErrors({});
     setFeedback('Reset to the deployed addresses.');
   };
 
   const deployedRows = [
-    { label: 'RunwayVault', address: DEPLOYED.vault, role: 'Holds lender funds, issues and repays advances' },
-    { label: 'RunwayFactory', address: DEPLOYED.factory, role: 'Registers and discovers splitters' },
-    { label: 'RevenueSplitter', address: DEPLOYED.splitter, role: 'Live agent routing contract' },
-    { label: 'Splitter implementation', address: DEPLOYED.splitterImpl, role: 'Clone implementation used by the factory' },
-    { label: 'USDC', address: DEPLOYED.usdc, role: 'FiatTokenV2 with EIP-3009 support' },
-  ];
+    { key: 'vault', label: 'RunwayVault', role: 'Holds lender funds, issues and repays advances' },
+    { key: 'factory', label: 'RunwayFactory', role: 'Registers and discovers splitters' },
+    { key: 'splitter', label: 'RevenueSplitter', role: 'Live agent routing contract' },
+    { key: 'splitterImpl', label: 'Splitter implementation', role: 'Clone implementation used by the factory' },
+    { key: 'usdc', label: 'USDC', role: 'FiatTokenV2 with EIP-3009 support' },
+  ]
+    .map((row) => ({ ...row, ...(deployed?.[row.key as keyof typeof deployed] ?? {}) }))
+    .filter((row): row is typeof row & { address: string; explorer: string } => Boolean(row.address));
 
   return (
     <main className="content">
       <PageHeader
         eyebrow="CONFIGURATION / DEPLOYMENTS"
         title="Contracts"
-        subtitle="Addresses deployed on Arc testnet, plus a local override."
+        subtitle="Addresses served by the API for the configured network, plus a browser-local override."
       />
 
-      <Section title="Deployed contracts" subtitle="Arc testnet, chain 5042002 — source verified on the explorer" testId="section-deployed">
+      <Section
+        title="Deployed contracts"
+        subtitle={
+          loading
+            ? 'Reading the deployment from the API…'
+            : `${data?.network ?? 'unknown'}, chain ${data?.chainId ?? '—'} — addresses served by /api/status`
+        }
+        testId="section-deployed"
+      >
         <div className="contract-list">
           {deployedRows.map((row) => (
             <div className="contract-row" key={row.address}>
@@ -84,7 +96,7 @@ export function ContractsPage() {
                 <div className="contract-name">{row.label}</div>
                 <a
                   className="contract-address mono"
-                  href={`${DEPLOYED.explorer}/address/${row.address}`}
+                  href={row.explorer}
                   target="_blank"
                   rel="noreferrer noopener"
                   title={row.address}
@@ -95,7 +107,7 @@ export function ContractsPage() {
               </div>
               <a
                 className="row-link"
-                href={`${DEPLOYED.explorer}/address/${row.address}`}
+                href={row.explorer}
                 target="_blank"
                 rel="noreferrer noopener"
               >
@@ -106,7 +118,12 @@ export function ContractsPage() {
         </div>
       </Section>
 
-      <Section title="Local override" subtitle="Stored in this browser only; does not change chain reads" kicker="LOCAL" testId="section-configuration">
+      <Section
+        title="Local override"
+        subtitle="Stored in this browser only. Reads above still come from the API; this never changes them."
+        kicker="LOCAL"
+        testId="section-configuration"
+      >
         <div className="config-body">
           <form onSubmit={save} noValidate data-testid="form-contract-config">
             <div className="config-grid">
@@ -114,7 +131,7 @@ export function ContractsPage() {
                 <label key={field}>
                   <span className="field-label">
                     {field === 'vault' ? 'Vault contract' : 'Factory contract'}{' '}
-                    <span className="field-hint">BASE SEPOLIA</span>
+                    <span className="field-hint">{data?.network ?? 'chain unknown'}</span>
                   </span>
                   <input
                     className="address-input"
@@ -151,18 +168,19 @@ export function ContractsPage() {
           </form>
 
           <div className="saved-addresses">
-            <div className="saved-address">
-              <div className="saved-address-label">Active vault</div>
-              <div className="saved-address-value mono" title={saved.vault}>
-                {saved.vault}
+            {(['vault', 'factory'] as const).map((field) => (
+              <div className="saved-address" key={field}>
+                <div className="saved-address-label">
+                  Override {field === 'vault' ? 'vault' : 'factory'}
+                </div>
+                <div
+                  className="saved-address-value mono"
+                  title={saved[field] || undefined}
+                >
+                  {saved[field] || 'not set — using the API deployment'}
+                </div>
               </div>
-            </div>
-            <div className="saved-address">
-              <div className="saved-address-label">Active factory</div>
-              <div className="saved-address-value mono" title={saved.factory}>
-                {saved.factory}
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </Section>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { PageFooter, PageHeader } from '@/components/app-shell';
-import { shortAddress } from '@/lib/chain-status';
+import { shortAddress, useChainStatus } from '@/lib/chain-status';
 import { Section } from '@/components/section';
 import {
   ARC_TESTNET,
@@ -88,12 +88,21 @@ const SELLER = '/api/demo/sell';
 const RESOURCE = '/api/demo/sell';
 
 export function PayPage() {
+  // Only the explorer base comes from here. Addresses and the token deliberately
+  // do not: the seller's challenge is authoritative for those, so the page can
+  // never approve one splitter while paying another.
+  const { data } = useChainStatus();
+  const explorerBase =
+    data?.contracts?.vault?.explorer?.replace(/\/address\/.*$/, '') ?? 'https://explorer.testnet.arc.io';
   const [wallets, setWallets] = useState<{ uuid: string; name: string }[]>([]);
   const [wallet, setWallet] = useState<ConnectedWallet | null>(null);
   const [usdc, setUsdc] = useState<bigint | null>(null);
   const [native, setNative] = useState<bigint | null>(null);
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [price, setPrice] = useState<bigint | null>(null);
+  // Both come from the seller's own x402 challenge, which is authoritative.
+  const [payTo, setPayTo] = useState<`0x${string}` | null>(null);
+  const [asset, setAsset] = useState<`0x${string}` | null>(null);
   const [resource, setResource] = useState<Receipt | null>(null);
   const [stages, setStages] = useState<Stage[]>(STAGES.map((s) => ({ ...s, state: 'pending' })));
   const [error, setError] = useState<string | null>(null);
@@ -118,23 +127,33 @@ export function PayPage() {
     setWallets(discoverWallets());
   }, []);
 
-  // The seller advertises its price without payment, so it can be shown before
-  // a wallet is connected.
+  // The seller advertises its price and its payTo without payment, so both can
+  // be shown before a wallet is connected.
+  //
+  // payTo comes from the challenge rather than a constant in this file. It used
+  // to be hardcoded, which meant the allowance was granted to one address while
+  // the payment went to whatever the challenge said. Those agreed only by luck:
+  // repoint the deployment and the page would approve the old splitter and pay
+  // the new one, or approve an allowance nothing could use.
   useEffect(() => {
     fetch('/api/demo/sell-x402')
       .then((response) => response.json())
-      .then((challenge: { accepts?: { maxAmountRequired: string }[] }) => {
-        const value = challenge.accepts?.[0]?.maxAmountRequired;
-        if (value) setPrice(BigInt(value));
-      })
+      .then(
+        (challenge: { accepts?: { maxAmountRequired: string; payTo?: string; asset?: string }[] }) => {
+          const first = challenge.accepts?.[0];
+          if (first?.maxAmountRequired) setPrice(BigInt(first.maxAmountRequired));
+          if (first?.payTo) setPayTo(first.payTo as `0x${string}`);
+          if (first?.asset) setAsset(first.asset as `0x${string}`);
+        },
+      )
       .catch(() => undefined);
   }, []);
 
   const readBalances = useCallback(async (target: ConnectedWallet) => {
     const [token, gas, allowed] = await Promise.all([
-      getUsdcBalance(target),
+      getUsdcBalance(target, asset ?? undefined),
       getNativeBalance(target),
-      getAllowance(target, SELLER_PAY_TO),
+      getAllowance(target, payTo ?? PAY_TO_UNAVAILABLE, asset ?? undefined),
     ]);
     setUsdc(token);
     setNative(gas);
@@ -183,11 +202,16 @@ export function PayPage() {
     setError(null);
     mark('approve', { state: 'active' });
     try {
-      const hash = await approveUsdc(wallet, SELLER_PAY_TO, price * 1000n);
+      if (!payTo) {
+        setError('The seller did not advertise a payment address. Reload and try again.');
+        mark('approve', { state: 'failed', detail: 'no payTo in the challenge' });
+        return;
+      }
+      const hash = await approveUsdc(wallet, payTo, price * 1000n, asset ?? undefined);
       mark('approve', {
         state: 'done',
         detail: `${formatUsd(price * 1000n)} USDC allowance`,
-        explorer: `https://explorer.testnet.arc.io/tx/${hash}`,
+        explorer: `${explorerBase}/tx/${hash}`,
       });
       await readBalances(wallet);
     } catch (cause) {
@@ -228,6 +252,9 @@ export function PayPage() {
       const signed = await signAuthorization(wallet, {
         to: requirement.payTo,
         value: BigInt(requirement.maxAmountRequired),
+        // The signed domain must match the token and chain being paid on.
+        token: asset ?? undefined,
+        chainId: data?.chainId,
       });
       mark('sign', { state: 'done', detail: `nonce ${signed.authorization.nonce.slice(0, 12)}…` });
 
@@ -547,5 +574,8 @@ function TxRow(props: { label: string; detail: string; hash?: string; explorer?:
   );
 }
 
-/** Must match the seller's payTo; the vault and dashboard both use this splitter. */
-const SELLER_PAY_TO = '0x96559D62bAD82F31853F3dd1b6C3c3ef9F434279' as `0x${string}`;
+/**
+ * Sentinel used only to read an allowance before the challenge has resolved.
+ * Never approved or paid; the pay flow refuses to run until payTo is known.
+ */
+const PAY_TO_UNAVAILABLE = '0x0000000000000000000000000000000000000000' as `0x${string}`;

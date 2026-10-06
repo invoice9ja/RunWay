@@ -238,6 +238,10 @@ const handler: Handler = async (_req, res) => {
         vault: { address: config.vault, explorer: explorerAddress(config.vault) },
         factory: { address: config.factory, explorer: explorerAddress(config.factory) },
         splitter: { address: config.splitter, explorer: explorerAddress(config.splitter) },
+        splitterImpl: {
+          address: config.splitterImpl,
+          explorer: explorerAddress(config.splitterImpl),
+        },
         usdc: { address: config.usdc, explorer: explorerAddress(config.usdc) },
       },
       protocol: {

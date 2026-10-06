@@ -32,15 +32,30 @@ export const ARC_TESTNET = {
   rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
 } as const;
 
+/**
+ * Arc testnet USDC. A default only: the token that actually matters comes from
+ * the seller's x402 challenge (`accepts[0].asset`), because that same address is
+ * the EIP-712 `verifyingContract` and the token the facilitator spends.
+ * Hardcoding it meant moving chains would read balances and sign authorizations
+ * against the wrong token, and the signature would simply fail on-chain.
+ */
 export const USDC = '0x3600000000000000000000000000000000000000' as Address;
 
-/** Circle's USDC uses a fixed EIP-712 domain, not EIP-5267 discovery. */
-export const USDC_DOMAIN = {
-  name: 'USDC',
-  version: '2',
-  chainId: ARC_TESTNET.id,
-  verifyingContract: USDC,
-} as const;
+/**
+ * Circle's USDC uses a fixed EIP-712 domain, not EIP-5267 discovery.
+ *
+ * Both the token and the chain id vary, so the domain is derived rather than
+ * frozen: a signature over the wrong domain is well-formed and still reverts.
+ */
+export const usdcDomain = (token: Address = USDC, chainId: number = ARC_TESTNET.id) =>
+  ({
+    name: 'USDC',
+    version: '2',
+    chainId,
+    verifyingContract: token,
+  }) as const;
+
+export const USDC_DOMAIN = usdcDomain();
 
 export const TRANSFER_WITH_AUTHORIZATION = {
   TransferWithAuthorization: [
@@ -157,9 +172,9 @@ export async function switchToArc(wallet: ConnectedWallet): Promise<void> {
   }
 }
 
-export async function getUsdcBalance(wallet: ConnectedWallet): Promise<bigint> {
+export async function getUsdcBalance(wallet: ConnectedWallet, token: Address = USDC): Promise<bigint> {
   return wallet.publicClient.readContract({
-    address: USDC,
+    address: token,
     abi: erc20Abi,
     functionName: 'balanceOf',
     args: [wallet.address],
@@ -173,9 +188,10 @@ export async function getNativeBalance(wallet: ConnectedWallet): Promise<bigint>
 export async function getAllowance(
   wallet: ConnectedWallet,
   spender: Address,
+  token: Address = USDC,
 ): Promise<bigint> {
   return wallet.publicClient.readContract({
-    address: USDC,
+    address: token,
     abi: erc20Abi,
     functionName: 'allowance',
     args: [wallet.address, spender],
@@ -191,9 +207,10 @@ export async function approveUsdc(
   wallet: ConnectedWallet,
   spender: Address,
   amount: bigint,
+  token: Address = USDC,
 ): Promise<`0x${string}`> {
   const hash = await wallet.walletClient.writeContract({
-    address: USDC,
+    address: token,
     abi: erc20Abi,
     functionName: 'approve',
     args: [spender, amount],
@@ -219,7 +236,7 @@ export type SignedAuthorization = {
 /** Ask the wallet to sign the EIP-3009 authorization the seller will pull. */
 export async function signAuthorization(
   wallet: ConnectedWallet,
-  params: { to: Address; value: bigint; validForSeconds?: number },
+  params: { to: Address; value: bigint; validForSeconds?: number; token?: Address; chainId?: number },
 ): Promise<SignedAuthorization> {
   const now = BigInt(Math.floor(Date.now() / 1000));
   // A little slack at the front so a signature is not rejected as "not valid
@@ -239,7 +256,10 @@ export async function signAuthorization(
   };
 
   const signature = (await wallet.walletClient.signTypedData({
-    domain: USDC_DOMAIN,
+    // The signing domain must name the token actually being spent. If this ever
+    // disagrees with the transfer the facilitator submits, the signature is
+    // valid for a different contract and the payment reverts.
+    domain: usdcDomain(params.token, params.chainId),
     types: TRANSFER_WITH_AUTHORIZATION,
     primaryType: 'TransferWithAuthorization',
     message,
