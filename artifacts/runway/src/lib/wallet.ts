@@ -128,7 +128,7 @@ export async function connect(
 
   const publicClient = createPublicClient({
     chain: ARC_TESTNET,
-    transport: http(ARC_TESTNET.rpcUrls.default.http[0]),
+    transport: http('/api/rpc', { batch: true, retryCount: 2, timeout: 20_000 }),
   });
 
   const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as Address[];

@@ -7,6 +7,18 @@ import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+// The browser wallet talks to the chain through a same-origin JSON-RPC relay,
+// normally the `/api/rpc` serverless function. In plain `vite dev` that
+// function is not mounted, so forward it here instead.
+const rpcProxy = {
+  '/api/rpc': {
+    target: 'https://rpc.testnet.arc.network',
+    changeOrigin: true,
+    secure: true,
+    rewrite: (path: string) => path.replace(/^\/api\/rpc/, ''),
+  },
+};
+
 export default defineConfig({
   base: '/',
   plugins: [
@@ -51,10 +63,12 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    proxy: rpcProxy,
   },
   preview: {
     port: 3000,
     host: '0.0.0.0',
     allowedHosts: true,
+    proxy: rpcProxy,
   },
 });
