@@ -7,11 +7,14 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:server": "tsx watch src/server.ts",
+    "serve": "tsx src/server.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "ethers": "^6.13.0"
+    "viem": "^2.57.0",
+    "@workspace/runway-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
