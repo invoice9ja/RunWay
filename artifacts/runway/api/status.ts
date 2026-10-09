@@ -1,4 +1,4 @@
-import { getPublicClient } from './_lib/chain.js';
+import { getLogsClient, getPublicClient } from './_lib/chain.js';
 import { config, explorerAddress, explorerTx, formatUsdc } from './_lib/config.js';
 import { erc20Abi, factoryAbi, splitterAbi, vaultAbi } from './_lib/abi.js';
 import {
@@ -14,13 +14,16 @@ import type { Handler } from './_lib/http.js';
 /**
  * Block window for event history.
  *
- * Sized to reach this deployment's real activity. Arc testnet blocks about every
- * 510s, and the three loan cycles plus the x402 payments sit a few thousand blocks
- * back, so a short window returns an empty dashboard that looks perfectly healthy.
- * `fetchLogsForAddress` chunks the range and retries, which is how the endpoint's
- * unreliability is handled; the window itself only needs to be long enough.
+ * Arc testnet produces a block about every half second, so 20,000 blocks is
+ * roughly the last few hours — enough for a recording and small enough that the
+ * whole window can be scanned inside one function invocation. Override with
+ * RUNWAY_LOOKBACK_BLOCKS when a deployment needs deeper history.
  */
 const LOOKBACK_BLOCKS = 20_000n;
+
+/** Left-pad an address into the 32-byte word an indexed event argument uses. */
+const padAddressTopic = (address: string): `0x${string}` =>
+  `0x${address.toLowerCase().replace(/^0x/, '').padStart(64, '0')}`;
 
 /**
  * Each read costs roughly twenty RPC calls, and the public Base Sepolia endpoint
@@ -130,13 +133,19 @@ const handler: Handler = async (_req, res) => {
     );
 
     /**
-     * The window is sized to cover real history rather than to be safe: Arc testnet
-     * blocks about every 510s, so the loans and settlements in this deployment sit
-     * a few thousand blocks back. A window too short to reach them shows an empty
-     * dashboard that looks correct, which is the failure worth avoiding. Chunking
-     * and retries handle the endpoint's unreliability instead.
+     * The window is sized to cover real history rather than to be safe. Arc testnet
+     * produces a block about every half second, so this spans roughly the last few
+     * hours. It is configurable because the useful window depends on how much
+     * history a deployment has; a window too short to reach a payment shows an
+     * empty dashboard that looks correct, which is the failure worth avoiding.
      */
-    const fromBlock = head > LOOKBACK_BLOCKS ? head - LOOKBACK_BLOCKS : 0n;
+    const lookback = BigInt(process.env.RUNWAY_LOOKBACK_BLOCKS ?? LOOKBACK_BLOCKS.toString());
+    const fromBlock = head > lookback ? head - lookback : 0n;
+
+    // Log scans go through a separate client: the endpoint that answers ordinary
+    // calls reliably caps `eth_getLogs` at ten blocks, which cannot cover this
+    // window. Reads above still use the reliable endpoint.
+    const logs = getLogsClient();
 
     // One pass per address, then filter by topic locally. Querying per event name
     // cost roughly eighty RPC calls per read and got rate-limited into silence.
@@ -145,20 +154,14 @@ const handler: Handler = async (_req, res) => {
     // the public endpoint's rate limiter, which then fails the chunks it should
     // have served.
     const splitterLogs = await fetchLogsForAddress(
-      client,
+      logs,
       { address: config.splitter, abi: splitterAbi, fromBlock, toBlock: head },
       explorerTx,
       stats,
     );
     const vaultLogs = await fetchLogsForAddress(
-      client,
+      logs,
       { address: config.vault, abi: vaultAbi, fromBlock, toBlock: head },
-      explorerTx,
-      stats,
-    );
-    const usdcLogs = await fetchLogsForAddress(
-      client,
-      { address: config.usdc, abi: erc20Abi, fromBlock, toBlock: head, chunk: 3_000n },
       explorerTx,
       stats,
     );
@@ -167,6 +170,21 @@ const handler: Handler = async (_req, res) => {
     const repaidTopic = topicsByName(vaultAbi).Repaid;
     const loanTopic = topicsByName(vaultAbi).LoanOpened;
     const transferTopic = topicsByName(erc20Abi).Transfer;
+
+    // Ask the node only for transfers into the splitter. USDC is the busiest
+    // address on this chain, and an unfiltered scan of it is rejected outright.
+    const usdcLogs = await fetchLogsForAddress(
+      logs,
+      {
+        address: config.usdc,
+        abi: erc20Abi,
+        fromBlock,
+        toBlock: head,
+        topics: [transferTopic, null, padAddressTopic(config.splitter)],
+      },
+      explorerTx,
+      stats,
+    );
 
     const settledRows = splitterLogs.filter((row) => row.topic0 === settledTopic);
     const repaidRows = vaultLogs.filter((row) => row.topic0 === repaidTopic);

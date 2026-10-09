@@ -3,25 +3,15 @@ import { decodeEventLog, toEventSelector, type Abi, type AbiEvent } from 'viem';
 import type { RunwayPublicClient } from './chain.js';
 
 /**
- * Block window per `eth_getLogs` request.
- *
- * Measured against the public Arc endpoint: the full 20,000-block window in
- * 10,000-block chunks is two requests and returns in under half a second, while
- * 300-block chunks produced over two hundred requests and tripped the rate
- * limiter. Fewer, wider requests are strictly better here. The limit exists at
- * all because the endpoint rejects very long ranges.
- */
-const CHUNK = 10_000n;
+  * Block window per `eth_getLogs` request.
+  *
+  * Sized to the widest range the log endpoint actually serves. It now rejects
+  * anything beyond roughly 5,000 blocks with "requested range too large", so the
+  * old 10,000-block chunk never came back and every read spent its retries
+  * before failing.
+  */
+const CHUNK = 5_000n;
 
-/**
- * USDC needs a much smaller chunk than the protocol contracts.
- *
- * Arc testnet USDC is high-traffic: a 3,000-block window carries around 15,000
- * transfer logs. Wide queries against it are rejected, so the same 10,000-block
- * chunk that serves the vault in two requests fails for the token and silently
- * drops every receipt.
- */
-const CHUNK_HIGH_TRAFFIC = 3_000n;
 
 /** Ceiling so one status read cannot fan out into an unbounded call storm. */
 const MAX_CHUNKS = 8;
@@ -104,6 +94,15 @@ export async function fetchLogsForAddress(
     abi: Abi;
     fromBlock: bigint;
     toBlock: bigint;
+    /**
+     * Topic filter pushed to the node.
+     *
+     * Filtering here rather than only after decoding is what makes USDC
+     * affordable: an unfiltered window on that token returns tens of thousands
+     * of transfers, which the endpoint refuses. Asking only for transfers *to*
+     * one address keeps the response to a handful of rows per chunk.
+     */
+    topics?: (`0x${string}` | null)[];
     /** Override for high-traffic addresses such as USDC. */
     chunk?: bigint;
   },
@@ -150,6 +149,7 @@ export async function fetchLogsForAddress(
               address: options.address,
               fromBlock: `0x${start.toString(16)}`,
               toBlock: `0x${end.toString(16)}`,
+              ...(options.topics ? { topics: options.topics } : {}),
             },
           ],
         } as never)) as ReadonlyArray<{

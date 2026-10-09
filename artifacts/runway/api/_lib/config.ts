@@ -12,6 +12,16 @@ export const config = {
   /** Arc testnet public RPC. No API key, so it is safe to ship in the client too. */
   rpcUrl: read('RUNWAY_RPC_URL', 'https://rpc.testnet.arc.network'),
   chainId: Number(read('RUNWAY_CHAIN_ID', '5042002')),
+  /**
+   * RPC used for `eth_getLogs` only.
+   *
+   * Kept separate from `rpcUrl` because the endpoints differ in what they allow.
+   * Alchemy's free tier answers a normal call but caps a log query at ten blocks,
+   * which is unusable for a dashboard; the public Arc endpoint serves wide ranges
+   * but caps them near 5,000 blocks. So reads and balances go to the reliable
+   * keyed endpoint, and log scans go to the one that accepts a range.
+   */
+  logsRpcUrl: read('RUNWAY_LOGS_RPC_URL', 'https://rpc.testnet.arc.network'),
   /** x402 `network` identifier. */
   network: read('RUNWAY_NETWORK', 'arc-testnet'),
   explorer: read('RUNWAY_EXPLORER_URL', 'https://explorer.testnet.arc.io'),

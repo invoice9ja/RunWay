@@ -30,6 +30,14 @@ function buildPublicClient() {
   });
 }
 
+/** Separate client for `eth_getLogs`; see config.logsRpcUrl for why it differs. */
+function buildLogsClient() {
+  return createPublicClient({
+    chain: chainFor(config.chainId),
+    transport: http(config.logsRpcUrl, { batch: false, retryCount: 2, timeout: 20_000 }),
+  });
+}
+
 function buildWalletClient() {
   const account = privateKeyToAccount(config.settlerKey as `0x${string}`);
   return {
@@ -44,6 +52,14 @@ function buildWalletClient() {
 
 export type RunwayPublicClient = ReturnType<typeof buildPublicClient>;
 export type RunwayWalletClient = ReturnType<typeof buildWalletClient>['client'];
+
+let logsClient: RunwayPublicClient | undefined;
+
+export function getLogsClient(): RunwayPublicClient {
+  if (config.logsRpcUrl === config.rpcUrl) return getPublicClient();
+  logsClient ??= buildLogsClient();
+  return logsClient;
+}
 
 let publicClient: RunwayPublicClient | undefined;
 let wallet: { account: ReturnType<typeof privateKeyToAccount>; client: RunwayWalletClient } | undefined;
