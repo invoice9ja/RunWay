@@ -17,6 +17,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 import {
   allowanceAbi,
+  ARC_TESTNET_CHAIN_ID,
   authorizationStateAbi,
   createSplitterAbi,
   agentAbi,
@@ -110,10 +111,27 @@ export type CreateClientOptions = RunwayConfig & {
  * silently breaks every payment on any other.
  */
 export function createRunwayClient(options: CreateClientOptions): RunwayClient {
+  /**
+   * The vault and factory defaults are this repository's testnet deployment.
+   *
+   * On any other chain they are worse than useless: the caller signs for the
+   * chain they asked for, and the contract calls land on an address that has no
+   * code there. Every failure then looks like a deployment problem rather than a
+   * configuration one. So the assumption is refused rather than made.
+   */
+  if (options.chainId !== ARC_TESTNET_CHAIN_ID && !(options.vault && options.factory)) {
+    throw new Error(
+      `Chain ${options.chainId} is not Arc testnet (${ARC_TESTNET_CHAIN_ID}), so the ` +
+        'bundled vault and factory addresses do not apply. Pass `vault` and `factory` ' +
+        'for this deployment explicitly.',
+    );
+  }
+
   const config: Required<RunwayConfig> = {
     chainId: options.chainId,
     network: options.network,
     rpcUrl: options.rpcUrl,
+    // USDC sits at the same address on Arc testnet and mainnet.
     usdc: options.usdc ?? USDC_ARC_TESTNET,
     factory: options.factory ?? FACTORY_ARC_TESTNET,
     vault: options.vault ?? VAULT_ARC_TESTNET,

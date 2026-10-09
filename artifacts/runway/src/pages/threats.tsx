@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { PageFooter, PageHeader } from '@/components/app-shell';
 import { Section } from '@/components/section';
 import { useChainStatus } from '@/lib/chain-status';
+import { NETWORK_LABEL } from '@/lib/chain';
 
 export function ThreatsPage() {
   const { data } = useChainStatus();
@@ -108,7 +109,7 @@ export function ThreatsPage() {
           </div>
           <ul className="check-list">
             <li className="ok">
-              Loan lifecycle works end to end on Arc testnet: one advance was
+              Loan lifecycle works end to end on {NETWORK_LABEL}: one advance was
               opened, driven to zero outstanding with the fee collected, and
               closed. The agent then withdrew its full balance with no surplus.
             </li>

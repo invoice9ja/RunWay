@@ -12,6 +12,9 @@ import {
 } from 'viem';
 
 import { erc20Abi } from '../../api/_lib/abi';
+import { ARC, CHAIN_ID, USDC } from './chain';
+
+export { ARC as ARC_TESTNET, USDC };
 
 /**
  * Browser wallet connection for paying Runway sellers.
@@ -25,29 +28,13 @@ import { erc20Abi } from '../../api/_lib/abi';
  * invalid and the seller rejects it, so switching is handled up front.
  */
 
-export const ARC_TESTNET = {
-  id: 5042002,
-  name: 'Arc Testnet',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
-} as const;
-
-/**
- * Arc testnet USDC. A default only: the token that actually matters comes from
- * the seller's x402 challenge (`accepts[0].asset`), because that same address is
- * the EIP-712 `verifyingContract` and the token the facilitator spends.
- * Hardcoding it meant moving chains would read balances and sign authorizations
- * against the wrong token, and the signature would simply fail on-chain.
- */
-export const USDC = '0x3600000000000000000000000000000000000000' as Address;
-
 /**
  * Circle's USDC uses a fixed EIP-712 domain, not EIP-5267 discovery.
  *
  * Both the token and the chain id vary, so the domain is derived rather than
  * frozen: a signature over the wrong domain is well-formed and still reverts.
  */
-export const usdcDomain = (token: Address = USDC, chainId: number = ARC_TESTNET.id) =>
+export const usdcDomain = (token: Address = USDC, chainId: number = CHAIN_ID) =>
   ({
     name: 'USDC',
     version: '2',
@@ -127,7 +114,7 @@ export async function connect(
   if (!provider) throw new Error('No browser wallet found. Install one, or use the hosted buyer.');
 
   const publicClient = createPublicClient({
-    chain: ARC_TESTNET,
+    chain: ARC,
     transport: http('/api/rpc', { batch: true, retryCount: 2, timeout: 20_000 }),
   });
 
@@ -140,7 +127,7 @@ export async function connect(
 
   const walletClient = createWalletClient({
     account: address,
-    chain: ARC_TESTNET,
+    chain: ARC,
     transport: custom(provider),
   });
 
@@ -149,7 +136,7 @@ export async function connect(
 
 /** Ask the wallet to switch to Arc testnet, adding the chain if unknown. */
 export async function switchToArc(wallet: ConnectedWallet): Promise<void> {
-  const chainIdHex = `0x${ARC_TESTNET.id.toString(16)}`;
+  const chainIdHex = `0x${CHAIN_ID.toString(16)}`;
   try {
     await wallet.provider.request({
       method: 'wallet_switchEthereumChain',
@@ -163,9 +150,9 @@ export async function switchToArc(wallet: ConnectedWallet): Promise<void> {
       params: [
         {
           chainId: chainIdHex,
-          chainName: ARC_TESTNET.name,
-          nativeCurrency: ARC_TESTNET.nativeCurrency,
-          rpcUrls: [...ARC_TESTNET.rpcUrls.default.http],
+          chainName: ARC.name,
+          nativeCurrency: ARC.nativeCurrency,
+          rpcUrls: [...ARC.rpcUrls.default.http],
         },
       ],
     });
@@ -214,7 +201,7 @@ export async function approveUsdc(
     abi: erc20Abi,
     functionName: 'approve',
     args: [spender, amount],
-    chain: ARC_TESTNET,
+    chain: ARC,
     account: wallet.address,
   });
   await wallet.publicClient.waitForTransactionReceipt({ hash });

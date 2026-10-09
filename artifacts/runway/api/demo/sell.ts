@@ -34,7 +34,32 @@ const PUBLIC_MAX_AMOUNT = 100_000n; // 0.1 USDC
  * real cost regardless of how fast distinct wallets arrive.
  */
 const PUBLIC_COOLDOWN_MS = 5_000;
-const WALLET_FLOOR = 500_000n; // 0.5 USDC
+
+/**
+ * Reserve the operator wallet must keep after paying.
+ *
+ * Settling a payment costs the operator real gas, and on mainnet that gas is
+ * real USDC. A floor of a fraction of a dollar is a rounding error there, so the
+ * amount is configurable and defaults higher off testnet.
+ */
+const WALLET_FLOOR = BigInt(
+  process.env.RUNWAY_DEMO_WALLET_FLOOR ??
+    // 10 USDC on mainnet, 0.5 on testnet where gas is worthless.
+    (config.network.includes('testnet') ? '500000' : '10000000'),
+);
+
+/**
+ * Ceiling on settled payments per hour, across all payers.
+ *
+ * The per-payer cooldown bounds one wallet, not a fleet of them: a bot can mint
+ * addresses cheaply and pay once from each, and every one of those transactions
+ * is gas the operator funds. This is the bound that actually caps the exposure.
+ */
+const MAX_PAYMENTS_PER_HOUR = Number(
+  process.env.RUNWAY_DEMO_MAX_PAYMENTS_PER_HOUR ?? (config.network.includes('testnet') ? '240' : '30'),
+);
+
+const paidAt: number[] = [];
 
 const lastPaidBy = new Map<string, number>();
 
@@ -127,6 +152,20 @@ const handler: Handler = async (req, res) => {
       return;
     }
     lastPaidBy.set(payer, Date.now());
+
+    // Global ceiling, across payers. In-memory and per instance, which is a
+    // floor on the real limit rather than a hard one; the wallet floor below is
+    // what actually stops the operator running dry.
+    const hourAgo = Date.now() - 3_600_000;
+    while (paidAt.length > 0 && paidAt[0] < hourAgo) paidAt.shift();
+    if (paidAt.length >= MAX_PAYMENTS_PER_HOUR) {
+      res.status(429).json({
+        error: `Demo capacity: ${MAX_PAYMENTS_PER_HOUR} payments per hour reached. Try again shortly.`,
+        retryAfterMs: 3_600_000 - (Date.now() - hourAgo),
+      });
+      return;
+    }
+    paidAt.push(Date.now());
   }
 
   let payment: PaymentPayload;

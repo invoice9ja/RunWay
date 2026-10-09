@@ -4,6 +4,7 @@ import { ArrowDownRight, Landmark, Layers3, Wallet } from 'lucide-react';
 import { ChainNotice, PageFooter, PageHeader } from '@/components/app-shell';
 import { Section } from '@/components/section';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
+import { NETWORK_LABEL } from '@/lib/chain';
 
 export function OverviewPage() {
   const { data } = useChainStatus();
@@ -13,7 +14,7 @@ export function OverviewPage() {
       <PageHeader
         eyebrow="WORKING CAPITAL / CONTROL ROOM"
         title="Operations overview"
-        subtitle="x402 revenue routing and advance repayment on Arc testnet."
+        subtitle={`x402 revenue routing and advance repayment on ${NETWORK_LABEL}.`}
       />
       <ChainNotice />
 

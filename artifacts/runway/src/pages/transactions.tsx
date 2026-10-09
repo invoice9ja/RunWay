@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { EmptyState, PageFooter, PageHeader } from '@/components/app-shell';
 import { Section } from '@/components/section';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
+import { NETWORK_LABEL } from '@/lib/chain';
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -94,7 +95,7 @@ export function TransactionsPage() {
       <PageHeader
         eyebrow="LEDGER / ACTIVITY"
         title="Transactions"
-        subtitle="Every protocol event observed on Arc testnet, newest first."
+        subtitle={`Every protocol event observed on ${NETWORK_LABEL}, newest first.`}
         action={
           <Link className="secondary-button" href="/x402">
             Run a payment

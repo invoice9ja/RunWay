@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { Sidebar } from '@/components/sidebar';
 import { useChainStatus } from '@/lib/chain-status';
+import { NETWORK_LABEL } from '@/lib/chain';
 
 const COLLAPSE_KEY = 'runway-sidebar-collapsed';
 
@@ -58,7 +59,7 @@ export function ChainNotice() {
       <div className="notice-copy">
         {data ? (
           <>
-            <strong>Live Arc testnet state.</strong> Every figure on this page is a
+            <strong>Live {NETWORK_LABEL} state.</strong> Every figure on this page is a
             direct contract read served by <code>/api/status</code> at block{' '}
             {data.block.toLocaleString()}.
           </>
@@ -69,7 +70,7 @@ export function ChainNotice() {
         ) : (
           <>
             <strong>Reading chain state.</strong> Loading vault, splitter and
-            advance data from Arc testnet.
+            advance data from {NETWORK_LABEL}.
           </>
         )}
       </div>
@@ -120,7 +121,7 @@ export function PageFooter() {
   return (
     <footer className="footer-line">
       <span>
-        <strong>RUNWAY</strong> / Arc testnet operations desk
+        <strong>RUNWAY</strong> / {NETWORK_LABEL} operations desk
       </span>
       <span>Live chain reads via /api/status</span>
     </footer>

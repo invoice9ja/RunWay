@@ -33,6 +33,17 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const PUBLIC_MAX_AMOUNT = 100_000n; // 0.1 USDC
 /** Per-account (the hosted buyer always pays from the operational wallet). */
 const PUBLIC_COOLDOWN_MS = 5_000;
+
+/**
+ * Reserve the buyer wallet keeps after paying.
+ *
+ * Same reasoning as the seller: this wallet funds gas, and gas is real money on
+ * mainnet, so the floor is configurable and defaults higher off testnet.
+ */
+const WALLET_FLOOR = BigInt(
+  process.env.RUNWAY_DEMO_WALLET_FLOOR ??
+    (config.network.includes('testnet') ? '500000' : '10000000'),
+);
 const PUBLIC_DAILY_CAP = 1_000_000n; // 1 USDC per UTC day
 /**
  * The buyer and the seller are the same operational account, so every dashboard
@@ -40,7 +51,6 @@ const PUBLIC_DAILY_CAP = 1_000_000n; // 1 USDC per UTC day
  * stranded by the contract accounting bugs. Refuse to run once the wallet drops
  * below this floor so the demo cannot drain itself to zero unattended.
  */
-const WALLET_FLOOR = 500_000n; // 0.5 USDC
 
 const lastBuyBy = new Map<string, number>();
 let publicVolume = 0n;

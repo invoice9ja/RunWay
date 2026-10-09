@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PageFooter, PageHeader } from '@/components/app-shell';
 import { shortAddress, useChainStatus } from '@/lib/chain-status';
 import { Section } from '@/components/section';
+import { NETWORK_LABEL } from '@/lib/chain';
 import {
   ARC_TESTNET,
   approveUsdc,
@@ -24,7 +25,7 @@ import {
  *
  * The flow is the x402 exact scheme, end to end, with a wallet doing the signing:
  *
- *   1. connect, and switch to Arc testnet if the wallet is elsewhere
+ *   1. connect, and switch to the configured network if the wallet is elsewhere
  *   2. read the 402 challenge the seller returns
  *   3. approve USDC once, because EIP-3009 is a pull
  *   4. sign the EIP-3009 authorization
@@ -239,7 +240,7 @@ export function PayPage() {
       const reconnected = await connect(wallet.provider);
       setWallet(reconnected);
       await readBalances(reconnected);
-      mark('connect', { state: 'done', detail: `${reconnected.address} on Arc testnet` });
+      mark('connect', { state: 'done', detail: `${reconnected.address} on ${NETWORK_LABEL}` });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -457,7 +458,7 @@ export function PayPage() {
             <div className="x402-actions" style={{ marginTop: 14 }}>
               {onWrongChain && (
                 <button className="primary-button" type="button" disabled={busy} onClick={doSwitch} data-testid="btn-switch">
-                  Switch to Arc testnet
+                  Switch to {NETWORK_LABEL}
                 </button>
               )}
               {needsApproval && (
@@ -478,7 +479,7 @@ export function PayPage() {
 
             {noUsdc && (
               <p className="page-note">
-                This wallet holds less than the price. Fund it with Arc testnet USDC, or use the
+                This wallet holds less than the price. Fund it with {NETWORK_LABEL} USDC, or use the
                 hosted buyer.
               </p>
             )}

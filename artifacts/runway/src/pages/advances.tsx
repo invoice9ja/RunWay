@@ -1,6 +1,7 @@
 import { EmptyState, PageFooter, PageHeader } from '@/components/app-shell';
 import { useChainStatus, shortAddress } from '@/lib/chain-status';
 import { Section } from '@/components/section';
+import { NETWORK_LABEL } from '@/lib/chain';
 
 const statusOf = (loan: {
   flagged: boolean;
@@ -100,7 +101,7 @@ export function AdvancesPage() {
           <EmptyState
             id="loans"
             label="No advances read"
-            detail="No working capital has been issued on Arc testnet yet."
+            detail={`No working capital has been issued on ${NETWORK_LABEL} yet.`}
           />
         )}
       </Section>

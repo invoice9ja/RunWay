@@ -7,9 +7,35 @@ import {
   fetchLogsForAddress,
   newFetchStats,
   topicsByName,
+  type LogRow,
 } from './_lib/events.js';
 import { blockTimes, isoTime } from './_lib/blocktime.js';
+import {
+  explorerAvailable,
+  fetchEvents,
+  fetchTransfers,
+  type ExplorerEvent,
+} from './_lib/blockscout.js';
 import type { Handler } from './_lib/http.js';
+
+/** A contract event, decoded, with its explorer link and time. */
+type LedgerEvent = {
+  transaction: `0x${string}`;
+  explorer: string;
+  block: number;
+  timestamp: string | null;
+  args: Record<string, bigint>;
+};
+
+/** Revenue arriving at the splitter. */
+type LedgerReceipt = {
+  transaction: `0x${string}`;
+  explorer: string;
+  block: number;
+  timestamp: string | null;
+  from: string;
+  amount: { raw: string; formatted: string };
+};
 
 /**
  * Block window for event history.
@@ -132,119 +158,212 @@ const handler: Handler = async (_req, res) => {
       }),
     );
 
-    /**
-     * The window is sized to cover real history rather than to be safe. Arc testnet
-     * produces a block about every half second, so this spans roughly the last few
-     * hours. It is configurable because the useful window depends on how much
-     * history a deployment has; a window too short to reach a payment shows an
-     * empty dashboard that looks correct, which is the failure worth avoiding.
-     */
-    const lookback = BigInt(process.env.RUNWAY_LOOKBACK_BLOCKS ?? LOOKBACK_BLOCKS.toString());
-    const fromBlock = head > lookback ? head - lookback : 0n;
-
-    // Log scans go through a separate client: the endpoint that answers ordinary
-    // calls reliably caps `eth_getLogs` at ten blocks, which cannot cover this
-    // window. Reads above still use the reliable endpoint.
-    const logs = getLogsClient();
-
-    // One pass per address, then filter by topic locally. Querying per event name
-    // cost roughly eighty RPC calls per read and got rate-limited into silence.
     const stats = newFetchStats();
-    // Sequential rather than concurrent: three simultaneous wide-range reads trip
-    // the public endpoint's rate limiter, which then fails the chunks it should
-    // have served.
-    const splitterLogs = await fetchLogsForAddress(
-      logs,
-      { address: config.splitter, abi: splitterAbi, fromBlock, toBlock: head },
-      explorerTx,
-      stats,
-    );
-    const vaultLogs = await fetchLogsForAddress(
-      logs,
-      { address: config.vault, abi: vaultAbi, fromBlock, toBlock: head },
-      explorerTx,
-      stats,
-    );
-
-    const settledTopic = topicsByName(splitterAbi).Settled;
-    const repaidTopic = topicsByName(vaultAbi).Repaid;
-    const loanTopic = topicsByName(vaultAbi).LoanOpened;
-    const transferTopic = topicsByName(erc20Abi).Transfer;
-
-    // Ask the node only for transfers into the splitter. USDC is the busiest
-    // address on this chain, and an unfiltered scan of it is rejected outright.
-    const usdcLogs = await fetchLogsForAddress(
-      logs,
-      {
-        address: config.usdc,
-        abi: erc20Abi,
-        fromBlock,
-        toBlock: head,
-        topics: [transferTopic, null, padAddressTopic(config.splitter)],
-      },
-      explorerTx,
-      stats,
-    );
-
-    const settledRows = splitterLogs.filter((row) => row.topic0 === settledTopic);
-    const repaidRows = vaultLogs.filter((row) => row.topic0 === repaidTopic);
-    const loanRows = vaultLogs.filter((row) => row.topic0 === loanTopic);
-    const receiptRows = usdcLogs.filter(
-      (row) => row.topic0 === transferTopic && String(row.args.to).toLowerCase() === config.splitter.toLowerCase(),
-    );
+    let receipts: LedgerReceipt[] = [];
+    let settlements: LedgerEvent[] = [];
+    let repayments: LedgerEvent[] = [];
+    let loansOpened: LedgerEvent[] = [];
+    let stampsRequested = 0;
+    let stampsResolved = 0;
+    let stampsFromCache = 0;
+    let stampsFetched = 0;
+    let stampsFailed = 0;
+    let fromBlock = 0n;
+    let settledRows: LogRow[] = [];
+    let repaidRows: LogRow[] = [];
+    let loanRows: LogRow[] = [];
+    let receiptRows: LogRow[] = [];
+    let explorerError: string | null = null;
 
     /**
-     * Block timestamps, resolved once for every event row.
+     * The ledger comes from the explorer's index, which carries timestamps and
+     * has no block-range limit. `eth_getLogs` stays as the fallback, and the
+     * source that answered is reported: a log scan only sees its window, so
+     * "0 receipts" from that path means something quite different from "0
+     * receipts" from the explorer.
      *
-     * Arc testnet blocks about every 510s, so the block number on its own says
-     * nothing about when a transaction happened. Collected together and cached by
-     * block, since a block's timestamp never changes.
+     * The probe is advisory, not a promise. If the explorer accepts `/stats` and
+     * then fails on the real query, the scan still runs rather than the endpoint
+     * returning an error the dashboard cannot recover from.
      */
-    const allBlocks = [
-      ...repaidRows,
-      ...settledRows,
-      ...loanRows,
-      ...receiptRows,
-    ].map((row) => row.block);
-    const stamps = await blockTimes(client, allBlocks);
-    const timeOf = (block: number) => isoTime(stamps.times.get(block));
+    const explorerLooksHealthy = await explorerAvailable();
+    let viaExplorer = explorerLooksHealthy;
 
-    const repayments = repaidRows.slice(0, 25).map((row) => ({
+    if (viaExplorer) {
+      try {
+        const [splitterEvents, vaultEvents, transfers] = await Promise.all([
+          fetchEvents(config.splitter, splitterAbi, { names: ['Settled'] }),
+          fetchEvents(config.vault, vaultAbi, { names: ['LoanOpened', 'Repaid'] }),
+          fetchTransfers(config.splitter, { token: config.usdc }),
+        ]);
+
+      const asEvent = (rows: ExplorerEvent[], names: string[]): LedgerEvent[] =>
+        rows
+          .filter((row) => names.includes(row.name))
+          .map((row) => ({
+            transaction: row.transaction,
+            explorer: explorerTx(row.transaction),
+            block: row.block,
+            timestamp: row.timestamp ? new Date(row.timestamp).toISOString() : null,
+            args: row.args as Record<string, bigint>,
+          }));
+
+      settlements = asEvent(splitterEvents, ['Settled']);
+      loansOpened = asEvent(vaultEvents, ['LoanOpened']);
+      repayments = asEvent(vaultEvents, ['Repaid']);
+
+      // A receipt is revenue arriving at the splitter. Filtered on the recipient
+      // because that is what makes it a receipt; the settlement that follows is
+      // picked up from the splitter's own events above.
+      receipts = transfers
+        .filter((row) => row.to.toLowerCase() === config.splitter.toLowerCase())
+        .map((row) => ({
+          transaction: row.transaction,
+          explorer: explorerTx(row.transaction),
+          block: row.block,
+          timestamp: row.timestamp ? new Date(row.timestamp).toISOString() : null,
+          from: row.from,
+          amount: usdcAmount(row.value),
+        }));
+      } catch (error) {
+        // Explorer reachable but not usable for this query. Say so and fall
+        // through to the scan: a narrower ledger beats none at all.
+        viaExplorer = false;
+        explorerError = (error as Error).message;
+      }
+    }
+
+    if (!viaExplorer) {
+      /**
+       * Fallback: scan logs over a bounded window and resolve timestamps by
+       * block. The window is configurable because the useful depth depends on
+       * the deployment, and a window too short to reach a payment returns an
+       * empty ledger that looks perfectly healthy.
+       */
+      const lookback = BigInt(process.env.RUNWAY_LOOKBACK_BLOCKS ?? LOOKBACK_BLOCKS.toString());
+      fromBlock = head > lookback ? head - lookback : 0n;
+
+      // Log scans go through a separate client: the endpoint that answers
+      // ordinary calls reliably caps `eth_getLogs` at ten blocks, which cannot
+      // cover this window. The reads above still use the reliable endpoint.
+      const logs = getLogsClient();
+
+      // One pass per address, then filter by topic locally. Querying per event
+      // name cost roughly eighty RPC calls per read and got rate-limited into
+      // silence.
+      const splitterLogs = await fetchLogsForAddress(
+        logs,
+        { address: config.splitter, abi: splitterAbi, fromBlock, toBlock: head },
+        explorerTx,
+        stats,
+      );
+      const vaultLogs = await fetchLogsForAddress(
+        logs,
+        { address: config.vault, abi: vaultAbi, fromBlock, toBlock: head },
+        explorerTx,
+        stats,
+      );
+
+      const settledTopic = topicsByName(splitterAbi).Settled;
+      const repaidTopic = topicsByName(vaultAbi).Repaid;
+      const loanTopic = topicsByName(vaultAbi).LoanOpened;
+      const transferTopic = topicsByName(erc20Abi).Transfer;
+
+      // Ask the node only for transfers into the splitter. USDC is the busiest
+      // address on this chain, and an unfiltered scan of it is rejected outright.
+      const usdcLogs = await fetchLogsForAddress(
+        logs,
+        {
+          address: config.usdc,
+          abi: erc20Abi,
+          fromBlock,
+          toBlock: head,
+          topics: [transferTopic, null, padAddressTopic(config.splitter)],
+        },
+        explorerTx,
+        stats,
+      );
+
+      settledRows = splitterLogs.filter((row) => row.topic0 === settledTopic);
+      repaidRows = vaultLogs.filter((row) => row.topic0 === repaidTopic);
+      loanRows = vaultLogs.filter((row) => row.topic0 === loanTopic);
+      receiptRows = usdcLogs.filter(
+        (row) =>
+          row.topic0 === transferTopic &&
+          String(row.args.to).toLowerCase() === config.splitter.toLowerCase(),
+      );
+
+      const stamps = await blockTimes(client, [
+        ...repaidRows,
+        ...settledRows,
+        ...loanRows,
+        ...receiptRows,
+      ].map((row) => row.block));
+      stampsRequested = stamps.requested;
+      stampsResolved = stamps.times.size;
+      stampsFromCache = stamps.fromCache;
+      stampsFetched = stamps.fetched;
+      stampsFailed = stamps.failed;
+      const timeOf = (block: number) => isoTime(stamps.times.get(block));
+
+      repayments = repaidRows.slice(0, 25).map((row) => ({
+        transaction: row.transaction,
+        explorer: row.explorer,
+        block: row.block,
+        timestamp: timeOf(row.block),
+        args: row.args as Record<string, bigint>,
+      }));
+      settlements = settledRows.slice(0, 25).map((row) => ({
+        transaction: row.transaction,
+        explorer: row.explorer,
+        block: row.block,
+        timestamp: timeOf(row.block),
+        args: row.args as Record<string, bigint>,
+      }));
+      receipts = receiptRows.slice(0, 25).map((row) => ({
+        transaction: row.transaction,
+        explorer: row.explorer,
+        block: row.block,
+        timestamp: timeOf(row.block),
+        from: addressArg(row, 'from'),
+        amount: usdcAmount(bigintArg(row, 'value')),
+      }));
+      loansOpened = loanRows.map((row) => ({
+        transaction: row.transaction,
+        explorer: row.explorer,
+        block: row.block,
+        timestamp: timeOf(row.block),
+        args: row.args as Record<string, bigint>,
+      }));
+    }
+
+    const repayments2 = repayments.map((row) => ({
       transaction: row.transaction,
       explorer: row.explorer,
       block: row.block,
-      timestamp: timeOf(row.block),
-      loanId: bigintArg(row, 'loanId').toString(),
-      amount: usdcAmount(bigintArg(row, 'amount')),
+      timestamp: row.timestamp,
+      loanId: String(row.args.loanId ?? 0n),
+      amount: usdcAmount(row.args.amount ?? 0n),
     }));
 
-    const settlements = settledRows.slice(0, 25).map((row) => ({
+    const settlements2 = settlements.map((row) => ({
       transaction: row.transaction,
       explorer: row.explorer,
       block: row.block,
-      timestamp: timeOf(row.block),
-      revenue: usdcAmount(bigintArg(row, 'revenue')),
-      lenderShare: usdcAmount(bigintArg(row, 'lenderShare')),
-      agentShare: usdcAmount(bigintArg(row, 'agentShare')),
+      timestamp: row.timestamp,
+      revenue: usdcAmount(row.args.revenue ?? 0n),
+      lenderShare: usdcAmount(row.args.lenderShare ?? 0n),
+      agentShare: usdcAmount(row.args.agentShare ?? 0n),
     }));
 
-    const receipts = receiptRows.slice(0, 25).map((row) => ({
+    const loansOpened2 = loansOpened.map((row) => ({
       transaction: row.transaction,
       explorer: row.explorer,
       block: row.block,
-      timestamp: timeOf(row.block),
-      from: addressArg(row, 'from'),
-      amount: usdcAmount(bigintArg(row, 'value')),
-    }));
-
-    const loansOpened = loanRows.map((row) => ({
-      transaction: row.transaction,
-      explorer: row.explorer,
-      block: row.block,
-      timestamp: timeOf(row.block),
-      loanId: bigintArg(row, 'loanId').toString(),
-      principal: usdcAmount(bigintArg(row, 'principal')),
-      feeBps: Number(bigintArg(row, 'feeBps')),
+      timestamp: row.timestamp,
+      loanId: String(row.args.loanId ?? 0n),
+      principal: usdcAmount(row.args.principal ?? 0n),
+      feeBps: Number(row.args.feeBps ?? 0),
     }));
 
     const payload = {
@@ -288,30 +407,35 @@ const handler: Handler = async (_req, res) => {
       },
       splitters: splitterRows,
       loans,
-      repayments,
-      settlements,
+      repayments: repayments2,
+      settlements: settlements2,
       receipts,
-      loansOpened,
+      loansOpened: loansOpened2,
       /**
-       * Blocks whose timestamp was resolved for this read. 0 means every lookup
-       * failed, which is worth knowing; a small number just means most blocks
-       * were already cached from an earlier read.
+       * Which source answered, and what it covered. Reported because the two
+       * paths have genuinely different reach: the explorer sees all history,
+       * while the log scan only sees its window. Reading "0 receipts" without
+       * knowing which produced it is how an empty ledger passes for a quiet one.
        */
-      blockTimestamps: {
-        requested: stamps.requested,
-        resolved: stamps.times.size,
-        fromCache: stamps.fromCache,
-        fetched: stamps.fetched,
-        failed: stamps.failed,
-      },
+      blockTimestamps: viaExplorer
+        ? { requested: 0, resolved: 0, fromCache: 0, fetched: 0, failed: 0 }
+        : {
+            requested: stampsRequested,
+            resolved: stampsResolved,
+            fromCache: stampsFromCache,
+            fetched: stampsFetched,
+            failed: stampsFailed,
+          },
       rpc: config.rpcUrl,
       indexer: {
-        fromBlock: Number(fromBlock),
-        toBlock: Number(head),
-        settledEvents: settledRows.length,
-        repaidEvents: repaidRows.length,
-        loanOpenedEvents: loanRows.length,
-        receiptEvents: receiptRows.length,
+        source: viaExplorer ? 'explorer' : 'log-scan',
+        ...(explorerError ? { explorerError } : {}),
+        fromBlock: viaExplorer ? null : Number(fromBlock),
+        toBlock: viaExplorer ? null : Number(head),
+        settledEvents: settlements2.length,
+        repaidEvents: repayments2.length,
+        loanOpenedEvents: loansOpened2.length,
+        receiptEvents: receipts.length,
         ...stats,
       },
     };

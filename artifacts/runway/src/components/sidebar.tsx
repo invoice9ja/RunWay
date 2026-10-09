@@ -4,6 +4,7 @@ import { ChevronLeft, Command, Menu, X } from 'lucide-react';
 
 import { NAV_ITEMS } from '@/lib/nav';
 import { useChainStatus } from '@/lib/chain-status';
+import { NETWORK_LABEL } from '@/lib/chain';
 
 /** Desktop collapses to an icon rail; below this the sidebar becomes a drawer. */
 const MOBILE_BREAKPOINT = 900;
@@ -106,7 +107,7 @@ export function Sidebar({
       <div className="nav-label">Network</div>
       <div className="chain-card" data-testid="status-network">
         <div className="chain-card-title">
-          <span className="chain-dot" aria-hidden />Arc testnet
+          <span className="chain-dot" aria-hidden />{NETWORK_LABEL}
         </div>
         <p className="chain-caption">
           {data ? (
@@ -144,7 +145,7 @@ export function Sidebar({
           {brand}
           <span className="testnet-pill mobile-pill">
             <span className="tiny-dot" aria-hidden />
-            Arc testnet
+            {NETWORK_LABEL}
           </span>
         </header>
 

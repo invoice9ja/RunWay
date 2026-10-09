@@ -1,6 +1,7 @@
 import { PageFooter, PageHeader } from '@/components/app-shell';
 import { Section } from '@/components/section';
 import { useDemoPayment } from '@/lib/chain-status';
+import { NETWORK_LABEL } from '@/lib/chain';
 
 export function X402Page() {
   const demo = useDemoPayment();
@@ -13,7 +14,7 @@ export function X402Page() {
         subtitle="Run a real EIP-3009 payment and watch it route through the splitter."
       />
 
-      <Section title="Buyer → 402 → signature → settlement" subtitle="Every step executes on Vercel against Arc testnet" kicker="SERVERLESS" testId="section-x402">
+      <Section title="Buyer → 402 → signature → settlement" subtitle={`Every step executes on Vercel against ${NETWORK_LABEL}`} kicker="SERVERLESS" testId="section-x402">
 
         <div className="x402-body">
           <div className="x402-actions">
@@ -106,7 +107,7 @@ export function X402Page() {
         </div>
       </Section>
 
-      <Section title="How it works" subtitle="The x402 exact scheme on Arc testnet">
+      <Section title="How it works" subtitle={`The x402 exact scheme on ${NETWORK_LABEL}`}>
         <ol className="explainer">
           <li>
             <strong>402 challenge.</strong> <code>GET /api/x402/resource</code>{' '}

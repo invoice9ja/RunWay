@@ -4,6 +4,9 @@ import type { Abi, AbiEvent, Address } from 'viem';
 export const X402_VERSION = 1;
 
 /** USDC on Arc testnet. */
+/** Chain id the bundled contract addresses below belong to. */
+export const ARC_TESTNET_CHAIN_ID = 5042002;
+
 export const USDC_ARC_TESTNET: Address = '0x3600000000000000000000000000000000000000';
 
 /**

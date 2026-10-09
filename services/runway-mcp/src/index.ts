@@ -47,7 +47,7 @@ function env(name: string): string | undefined {
   return value && value.length > 0 ? value : undefined;
 }
 
-const RPC_URL = env('RUNWAY_RPC_URL') ?? env('ARC_TESTNET_RPC');
+const RPC_URL = env('RUNWAY_RPC_URL') ?? env('ARC_MAINNET_RPC') ?? env('ARC_TESTNET_RPC');
 const PRIVATE_KEY = (env('AGENT_PRIVATE_KEY') ?? env('PRIVATE_KEY')) as `0x${string}` | undefined;
 const DEFAULT_SPLITTER = env('RUNWAY_SPLITTER') as Address | undefined;
 
@@ -56,7 +56,7 @@ const DEFAULT_SPLITTER = env('RUNWAY_SPLITTER') as Address | undefined;
  * rather than sending an unsigned call and surfacing a confusing RPC error.
  */
 function client(needsWallet = false) {
-  if (!RPC_URL) throw new Error('ARC_TESTNET_RPC (or RUNWAY_RPC_URL) is required');
+  if (!RPC_URL) throw new Error('RUNWAY_RPC_URL (or ARC_MAINNET_RPC / ARC_TESTNET_RPC) is required');
   if (needsWallet && !PRIVATE_KEY) {
     throw new Error('AGENT_PRIVATE_KEY (or PRIVATE_KEY) is required for write tools');
   }
@@ -64,9 +64,11 @@ function client(needsWallet = false) {
     chainId: Number(env('RUNWAY_CHAIN_ID') ?? 5042002),
     network: env('RUNWAY_NETWORK') ?? 'arc-testnet',
     rpcUrl: RPC_URL,
-    usdc: env('RUNWAY_USDC') as Address | undefined,
-    factory: env('RUNWAY_FACTORY') as Address | undefined,
-    vault: env('RUNWAY_VAULT') as Address | undefined,
+    // Addresses are only defaulted by the SDK on testnet; on any other chain
+    // they must be supplied, so these names are the contract.
+    usdc: (env('RUNWAY_USDC') ?? env('RUNWAY_USDC_ADDRESS')) as Address | undefined,
+    factory: (env('RUNWAY_FACTORY') ?? env('RUNWAY_FACTORY_ADDRESS')) as Address | undefined,
+    vault: (env('RUNWAY_VAULT') ?? env('RUNWAY_VAULT_ADDRESS')) as Address | undefined,
     privateKey: needsWallet ? PRIVATE_KEY : undefined,
   });
 }
